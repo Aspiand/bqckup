@@ -1,64 +1,59 @@
 from pathlib import Path
 from pprint import pprint
+import json
 import os
 import subprocess
-from typing import Any
 
 from classes.yml_parser import Yml_Parser
 
 
 class Rustic:
-    def __init__(
-        self,
-        site_config: dict[str, Any],
-        storage_config: dict[str, Any] = {},
-        env: dict[str, str] = {},
-    ):
-        self.site_config = site_config
-        self.storage_config = storage_config
-        self.env = env
+    def __init__(self):
+        self.subprocess_args = {
+            "capture_output": True,
+            "encoding": "utf-8",
+            "env": os.environ.copy() | {"RUSTIC_NO_PROGRESS": "true"}, # https://github.com/rustic-rs/rustic/tree/main/config
+        }
 
-    @property
-    def directories(self):
-        """Return which directory backups"""
-        # TODO
-        # filter in here or not?
-        return [dir for dir in self.site_config["path"] if Path(dir).exists()]
-
-    @property
-    def excluded(self):
-        return self.site_config["exclude_path"]
-
-    def backup(self, dirs: list[str], exclude: list[str] = []):
+    def backup(
+        self, dirs: list[str], symlink: bool = False, exclude_paths: list[str] = []
+    ) -> dict[str, int]:
         dirs = [
-            dir for dir in dirs if Path(dir).exists() and not Path(dir).is_symlink()
+            dir
+            for dir in dirs
+            if Path(dir).exists() or (not symlink and Path(dir).is_symlink())
         ]
-        options = ["--git-ignore", "--one-file-system"]
 
-        self.run("backup", *(options + dirs))
-
-    def snapshots(self):
-        return self.run("snapshots")
-
-    def run(self, subcommand: str, options: list[str] = []):
-        result = subprocess.run(
-            ["rustic", subcommand, *options, "--json"], env=self.env
+        output = subprocess.run(
+            [
+                "rustic",
+                "backup",
+                "--json",
+                "--git-ignore",
+                "--no-scan",
+                "--one-file-system",
+                *dirs,
+            ],
+            **self.subprocess_args,
         )
 
-        pprint(result)
+        summary: dict = json.loads(output.stdout)["summary"]
 
-        if result.returncode != 0:
-            ...  # TODO: handle this
+        return {
+            "new": summary["files_new"],
+            "changed": summary["files_changed"],
+            "unchanged": summary["files_unmodified"],
+            "total_duration": int(summary["total_duration"]),  # in seconds
+        }
 
 
 def run():
-    environment = os.environ.copy() | {"RUSTIC_NO_PROGRESS": "true"}
+    site_config = Yml_Parser.parse("/etc/bqckup/sites/domain.yml")["bqckup"]
+    # storage_config = Yml_Parser.parse("/etc/bqckup/config/storages.yml")
+    rustic = Rustic()
 
-    site_config = Yml_Parser.parse("/etc/bqckup/sites/domain.yml.example")["bqckup"]
-    rustic = Rustic(site_config, environment)
-
-    # rustic.snapshots()
-    pprint(rustic.excluded)
+    out = rustic.backup(site_config["path"])
+    pprint(out)
 
     # var = subprocess.run(["rustic", "repoinfo", "--json"], env=environment)
     # pprint(var)
@@ -70,7 +65,6 @@ def run():
 # check connection
 # check repository available
 # exclude direct to rustic command
-# add label for snapshot name
 # get_latest backup
 
 # rustic exclude -> --glob="!pattern*"

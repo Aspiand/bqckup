@@ -214,8 +214,11 @@ class Bqckup:
                 return False
 
             if backup.get("incremental"):
-                storage_config = Storage().get_storage_detail(backup.get("options").get("storage"))
-                rustic = Rustic(storage_config)
+                rustic = Rustic()
+                rustic.backup(
+                    backup.get("path"),
+                    backup.get("options")["follow_symlink"]
+                )
                 return
 
             # HELP: entrypoint
