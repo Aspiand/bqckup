@@ -8,12 +8,14 @@ from classes.yml_parser import Yml_Parser
 from classes.progress import ProgressSpinner
 from classes.yml_checker import Yml_Checker
 from classes.s3 import s3
+from classes.rustic import Rustic
 from models.log import Log
 from models.notification_log import NotificationLog
 from constant import BQ_PATH, STORAGE_CONFIG_PATH, SITE_CONFIG_PATH
 from datetime import datetime
 from helpers.file import remove_folder
 from hashlib import sha256
+from pathlib import Path
 from lib.notifications.discord import send_notification
 from helpers.datetime import time_since, get_today, difference_in_days, interval_in_number
 from helpers.network import get_server_ip
@@ -199,11 +201,9 @@ class Bqckup:
     def do_backup(self, backup_config):
         time_start = time.time()
         try:
-            bqckup_config_location = os.path.join(SITE_CONFIG_PATH, backup_config['file_name'])
+            bqckup_config_location = Path(SITE_CONFIG_PATH) / backup_config["file_name"]
             backup = Yml_Parser.parse(bqckup_config_location)['bqckup']
             backup_folder = f"{backup.get('name')}/{get_today()}"
-            
-            tmp_path = os.path.join(BQ_PATH, 'tmp', f"{backup.get('name')}")
 
             if(not backup.get('enabled')):
                 print(f"[red]Backup for {backup.get('name')} is not enabled[/red]")
@@ -212,8 +212,16 @@ class Bqckup:
             if Log().select().where((Log.name == backup.get('name')) & (Log.status == Log.__ON_PROGRESS__)).exists():
                 print(f"Backup for {backup.get('name')} is already running...")
                 return False
-            
-            if not File().is_exists(tmp_path):
+
+            if backup.get("incremental"):
+                storage_config = Storage().get_storage_detail(backup.get("options").get("storage"))
+                rustic = Rustic(storage_config)
+                return
+
+            # HELP: entrypoint
+
+            tmp_path = Path(BQ_PATH) / "tmp" / f"{backup.get('name')}"
+            if not tmp_path.exists():
                 os.makedirs(tmp_path)
 
             compressed_file = os.path.join(tmp_path, f"{int(time.time())}.tar.gz")
