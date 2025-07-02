@@ -1,5 +1,7 @@
 import os, time, shutil, signal, sys
+from typing import Any
 from classes.database import Database
+from classes.rustic import Rustic
 from classes.storage import Storage
 from classes.tar import Tar
 from classes.file import File
@@ -14,6 +16,7 @@ from constant import BQ_PATH, STORAGE_CONFIG_PATH, SITE_CONFIG_PATH
 from datetime import datetime
 from helpers.file import remove_folder
 from hashlib import sha256
+from pathlib import Path, PurePath
 from lib.notifications.discord import send_notification
 from helpers.datetime import time_since, get_today, difference_in_days, interval_in_number
 from helpers.network import get_server_ip
@@ -188,9 +191,11 @@ class Bqckup:
                         print("=========================================\n")
                         print(f"Visit: https://bqckup.com\n")
                         continue
-                    
 
-                self.do_backup(backup)
+                if backup.get("incremental"):
+                    self.incremental_backup(backup)
+                else:
+                    self.do_backup(backup)
             except Exception as e:
                 print(f"[red]Error during backup for {backup['name']}: {e}[/red]")
                 continue
@@ -398,6 +403,109 @@ class Bqckup:
             self._send_notification(backup.get('name'), f"Error: {e}", None)
                 
             print(f"[{backup.get('name')}] Error: {e}.")
-            
+
+    def incremental_backup(self, config: dict[str, Any]):
+        time_start = time.time()
+
+        if not config.get("enabled"):
+            print(f"[red]Backup for {config.get('name')} is not enabled[/red]")
+            return
+
+        if (
+            Log()
+            .select()
+            .where((Log.name == config["name"]) and (Log.status == Log.__ON_PROGRESS__))
+            .exists()
+        ):
+            print(f"Backup for {config['name']} is already running...")
+            return
+
+        logs = Log().write(
+            {
+                "name": config["name"],
+                "description": "File backup is in progress...",
+                "type": Log.__FILES__,
+                "storage": config["options"]["storage"],
+            }
+        )
+
+        print(f"[green]Starting backup for {config['name']}[/green]\n")
+
+        db_dump_path = self.backup_database(config)
+        result = Rustic.backup()
+
+    def backup_database(self, config: dict) -> Path:
+        """_summary_
+
+        Args:
+            config (dict):
+
+        Returns:
+            Path: return path to exported database
+        """
+
+        if not config.get("database"):
+            return
+
+        current_log: Log = Log().write(
+            {
+                "name": config["name"],
+                "description": "Database Backup is in Progress",
+                "type": Log.__DATABASE__,
+                "storage": config["options"]["storage"],
+            }
+        )
+
+        last_log = (
+            Log()
+            .select()
+            .where(
+                Log.name == config["name"]
+                and Log.type == Log.__DATABASE__
+                and Log.file_size != 0
+            )
+            .order_by(Log.id.desc())
+            .get_or_none()
+        )
+
+        tmp_path: Path = Path(BQ_PATH) / "tmp" / config["name"]
+        backup_path = tmp_path / f"{int(time.time())}.sql.gz"
+
+        if not tmp_path.exists() or not tmp_path.is_dir():
+            tmp_path.mkdir(parents=True, exist_ok=True)
+
+        with ProgressSpinner("Exporting database"):
+            Database().export(
+                backup_path,
+                db_user=config["database"]["user"],
+                db_password=config["database"]["password"],
+                db_name=config["database"]["name"],
+            )
+
+        previous_size = format_size(last_log.file_size)
+        current_size = format_size(backup_path.stat().st_size)
+        time_consume = format_timespan(last_log.time_consume)
+
+        current_log.update(file_size=current_size).execute()
+
+        if last_log:
+            print("=========================================")
+            print("Database Compressed")
+            print(f"Previous Size\t: {previous_size}")
+            print(f"Current Size\t: {current_size}")
+            print(f"Time Consumed\t: {time_consume}")  # Q: last_log ??
+            print("=========================================")
+
+            if previous_size == current_size:
+                print(
+                    f"[red]Based on file size, there is no changes detected for {backup_path}[/red]\n"
+                )
+
+        return backup_path
+
+        # TODO: clean temporary file
+        # if backup_path.exists():
+        #     backup_path.unlink(missing_ok=True)
+
     def remove(self):
         pass

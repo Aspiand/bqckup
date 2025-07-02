@@ -645,10 +645,10 @@ def common(
     pass
 
 
-if __name__ == "__main__":
-    if getpass.getuser() != "root":
-        print("Please run this script as root user")
-    else:
+if __name__ == "__main__": # TODO: uncomment
+    # if getpass.getuser() != "root":
+    #     print("Please run this script as root user")
+    # else:
         from app import initialization
 
         try:

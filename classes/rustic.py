@@ -8,20 +8,23 @@ from classes.yml_parser import Yml_Parser
 
 
 class Rustic:
-    def __init__(self):
-        self.subprocess_args = {
-            "capture_output": True,
-            "encoding": "utf-8",
-            "env": os.environ.copy() | {"RUSTIC_NO_PROGRESS": "true"}, # https://github.com/rustic-rs/rustic/tree/main/config
-        }
+    SUBPROCESS_ARGS = os.environ.copy() | {
+        "capture_output": True,
+        "text": True,
+        "env": os.environ.copy()
+        | {
+            "RUSTIC_NO_PROGRESS": "true"
+        },  # https://github.com/rustic-rs/rustic/tree/main/config
+    }
 
+    @classmethod
     def backup(
-        self, dirs: list[str], symlink: bool = False, exclude_paths: list[str] = []
+        cls, sources: list[str], symlink: bool = False, exclude_paths: list[str] = []
     ) -> dict[str, int]:
-        dirs = [
-            dir
-            for dir in dirs
-            if Path(dir).exists() or (not symlink and Path(dir).is_symlink())
+        sources = [
+            src
+            for src in sources
+            if Path(src).exists() and not (not symlink and Path(src).is_symlink())
         ]
 
         output = subprocess.run(
@@ -29,12 +32,12 @@ class Rustic:
                 "rustic",
                 "backup",
                 "--json",
-                "--git-ignore",
+                # "--git-ignore",
                 "--no-scan",
                 "--one-file-system",
-                *dirs,
+                *sources,
             ],
-            **self.subprocess_args,
+            **cls.SUBPROCESS_ARGS,
         )
 
         summary: dict = json.loads(output.stdout)["summary"]
@@ -66,6 +69,7 @@ def run():
 # check repository available
 # exclude direct to rustic command
 # get_latest backup
+# handle error
 
 # rustic exclude -> --glob="!pattern*"
 
