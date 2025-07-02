@@ -1,3 +1,4 @@
+from pprint import pprint
 import os, time, shutil, signal, sys
 from typing import Any
 from classes.database import Database
@@ -197,6 +198,8 @@ class Bqckup:
                 else:
                     self.do_backup(backup)
             except Exception as e:
+                import traceback # TODO: remove this
+                traceback.print_exc()
                 print(f"[red]Error during backup for {backup['name']}: {e}[/red]")
                 continue
     
@@ -379,7 +382,7 @@ class Bqckup:
                                 shutil.move(sql_path, save_locally_path)
                             except Exception as e:
                                 print(f"Failed to save locally: {e}")
-                        
+
                     time_consume = time.time() - time_start
                     Log().update_status(log_database.id, Log.__SUCCESS__, "Database Backup Success", time_consume)
             
@@ -411,18 +414,22 @@ class Bqckup:
             print(f"[red]Backup for {config.get('name')} is not enabled[/red]")
             return
 
+        if config.get("options").get("provider") != "s3":
+            raise RuntimeError("")  # TODO: write error message
+
         if (
             Log()
             .select()
-            .where((Log.name == config["name"]) and (Log.status == Log.__ON_PROGRESS__))
+            .where(Log.name == config["name"] and Log.status == Log.__ON_PROGRESS__)
             .exists()
         ):
             print(f"Backup for {config['name']} is already running...")
-            return
+            return  # TODO: idk
 
-        logs = Log().write(
+        logs: Log = Log().write(
             {
                 "name": config["name"],
+                "file_path": "/dev/null",  # TODO: change value
                 "description": "File backup is in progress...",
                 "type": Log.__FILES__,
                 "storage": config["options"]["storage"],
@@ -431,8 +438,43 @@ class Bqckup:
 
         print(f"[green]Starting backup for {config['name']}[/green]\n")
 
+        sources: list = config["path"]
+
         db_dump_path = self.backup_database(config)
-        result = Rustic.backup()
+        sources.append(db_dump_path)
+
+        if Config().read("bqckup", "config_backup"):
+            sources += (STORAGE_CONFIG_PATH,)  # TODO: later
+
+        result = None
+        with ProgressSpinner("Backing up..."):
+            result = Rustic.backup(sources)
+
+        should_save_locally = config.get("options").get("save_locally")
+        save_locally_path = Path(
+            config.get("options").get("save_locally_path")
+        )  # If not set it will be at /etc/bqckup/tmp
+
+        if not should_save_locally:
+            db_dump_path.unlink(missing_ok=True)
+        elif should_save_locally and save_locally_path:
+            print("Saving locally ...")
+
+            if not save_locally_path.is_dir():
+                raise Exception(
+                    f"Save locally path {save_locally_path} is not a directory"
+                )
+
+            save_locally_path: Path = save_locally_path / config["name"]
+            if not save_locally_path.is_dir():  # if directory not exists
+                save_locally_path.mkdir(parents=True, exist_ok=True)
+
+            shutil.move(db_dump_path, save_locally_path)
+
+        Log().update(file_size=result.get("size", 0)).where(Log.id == logs.id).execute()
+        Log().update_status(
+            logs.id, Log.__SUCCESS__, "File Backup Success", time.time() - time_start
+        )
 
     def backup_database(self, config: dict) -> Path:
         """_summary_
@@ -447,12 +489,17 @@ class Bqckup:
         if not config.get("database"):
             return
 
+        tmp_path: Path = Path(BQ_PATH) / "tmp" / config["name"]
+        backup_path = tmp_path / f"{int(time.time())}.sql.gz"
+        time_start = time.time()
+
         current_log: Log = Log().write(
             {
                 "name": config["name"],
                 "description": "Database Backup is in Progress",
                 "type": Log.__DATABASE__,
                 "storage": config["options"]["storage"],
+                "file_path": backup_path,
             }
         )
 
@@ -468,27 +515,25 @@ class Bqckup:
             .get_or_none()
         )
 
-        tmp_path: Path = Path(BQ_PATH) / "tmp" / config["name"]
-        backup_path = tmp_path / f"{int(time.time())}.sql.gz"
-
         if not tmp_path.exists() or not tmp_path.is_dir():
             tmp_path.mkdir(parents=True, exist_ok=True)
 
         with ProgressSpinner("Exporting database"):
             Database().export(
-                backup_path,
+                backup_path.__str__() if isinstance(backup_path, Path) else backup_path,
                 db_user=config["database"]["user"],
                 db_password=config["database"]["password"],
                 db_name=config["database"]["name"],
             )
 
-        previous_size = format_size(last_log.file_size)
-        current_size = format_size(backup_path.stat().st_size)
-        time_consume = format_timespan(last_log.time_consume)
-
+        current_size = backup_path.stat().st_size
         current_log.update(file_size=current_size).execute()
 
         if last_log:
+            previous_size = format_size(last_log.file_size)
+            time_consume = format_timespan(last_log.time_consume)
+            current_size = format_size(current_size)
+
             print("=========================================")
             print("Database Compressed")
             print(f"Previous Size\t: {previous_size}")
@@ -500,6 +545,13 @@ class Bqckup:
                 print(
                     f"[red]Based on file size, there is no changes detected for {backup_path}[/red]\n"
                 )
+
+        Log().update_status(
+            current_log.id,
+            Log.__SUCCESS__,
+            "Database Backup Success",
+            time.time() - time_start,
+        )
 
         return backup_path
 

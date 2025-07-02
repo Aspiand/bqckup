@@ -8,7 +8,7 @@ from classes.yml_parser import Yml_Parser
 
 
 class Rustic:
-    SUBPROCESS_ARGS = os.environ.copy() | {
+    SUBPROCESS_ARGS = {
         "capture_output": True,
         "text": True,
         "env": os.environ.copy()
@@ -47,6 +47,8 @@ class Rustic:
             "changed": summary["files_changed"],
             "unchanged": summary["files_unmodified"],
             "total_duration": int(summary["total_duration"]),  # in seconds
+            "size": summary["data_added_packed"],  # in byte
+            # "total_bytes_processed": summary["total_bytes_processed"]
         }
 
 
@@ -75,3 +77,6 @@ def run():
 
 # Clean
 # remove /main.py
+
+# NOTE
+# from playhouse.shortcuts import model_to_dict
