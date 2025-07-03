@@ -1,6 +1,10 @@
 bqckup:
   name: domain
   enabled: no
+  incremental: yes
+  rustic:
+    password: dummy # required if incremental
+    config_path: /etc/rustic/domain.com.toml # optional
   path:
     - /var/www/html
   exclude_path:
