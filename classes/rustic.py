@@ -13,7 +13,8 @@ class Rustic:
         "text": True,
         "env": os.environ.copy()
         | {
-            "RUSTIC_NO_PROGRESS": "true"
+            "RUSTIC_NO_PROGRESS": "true",
+            "RUSTIC_LOG_LEVEL": "info",
         },  # https://github.com/rustic-rs/rustic/tree/main/config
     }
 
@@ -35,6 +36,8 @@ class Rustic:
                 # "--git-ignore",
                 "--no-scan",
                 "--one-file-system",
+                # Create repository if not exists
+                "--init",
                 *sources,
             ],
             **cls.SUBPROCESS_ARGS,
@@ -47,21 +50,9 @@ class Rustic:
             "changed": summary["files_changed"],
             "unchanged": summary["files_unmodified"],
             "total_duration": int(summary["total_duration"]),  # in seconds
-            "uploaded": summary["data_added_packed"],  # data added to repository (compressed); in byte
-            "total_size": summary["total_bytes_processed"]
+            "uploaded": summary["data_added_packed"], # data added to repository (compressed); in byte
+            "total_size": summary["total_bytes_processed"],
         }
-
-
-def run():
-    site_config = Yml_Parser.parse("/etc/bqckup/sites/domain.yml")["bqckup"]
-    # storage_config = Yml_Parser.parse("/etc/bqckup/config/storages.yml")
-    rustic = Rustic()
-
-    out = rustic.backup(site_config["path"])
-    pprint(out)
-
-    # var = subprocess.run(["rustic", "repoinfo", "--json"], env=environment)
-    # pprint(var)
 
 # Storage().get_storage_detail(backup.get("options").get("storage")) -> get_primary_storage
 
@@ -72,7 +63,10 @@ def run():
 # get_latest backup
 # keep n
 # handle error
-# handle error pada scoope paling tinggi (run)
+# handle error pada scoope paling tinggi (run) -> log
+# key subcommand # Important
+# add label by domain?
+# check repository avaibility
 
 # rustic exclude -> --glob="!pattern*"
 
@@ -81,3 +75,11 @@ def run():
 
 # NOTE
 # from playhouse.shortcuts import model_to_dict
+
+
+# https://github.com/langgenius/dify/issues/12200
+# OPENDAL_S3_ENDPOINT
+# OPENDAL_S3_REGION
+# OPENDAL_S3_BUCKET
+# OPENDAL_S3_ACCESS_KEY_ID
+# OPENDAL_S3_SECRET_ACCESS_KEY
