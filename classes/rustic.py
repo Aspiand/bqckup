@@ -47,8 +47,8 @@ class Rustic:
             "changed": summary["files_changed"],
             "unchanged": summary["files_unmodified"],
             "total_duration": int(summary["total_duration"]),  # in seconds
-            "size": summary["data_added_packed"],  # in byte
-            # "total_bytes_processed": summary["total_bytes_processed"]
+            "uploaded": summary["data_added_packed"],  # data added to repository (compressed); in byte
+            "total_size": summary["total_bytes_processed"]
         }
 
 
@@ -63,7 +63,6 @@ def run():
     # var = subprocess.run(["rustic", "repoinfo", "--json"], env=environment)
     # pprint(var)
 
-
 # Storage().get_storage_detail(backup.get("options").get("storage")) -> get_primary_storage
 
 # TODO
@@ -71,7 +70,9 @@ def run():
 # check repository available
 # exclude direct to rustic command
 # get_latest backup
+# keep n
 # handle error
+# handle error pada scoope paling tinggi (run)
 
 # rustic exclude -> --glob="!pattern*"
 

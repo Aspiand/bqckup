@@ -190,7 +190,7 @@ class Bqckup:
                         print(f"Interval: {interval}")
                         print(f"\nBackup for {backup['name']} is not needed yet...")
                         print("=========================================\n")
-                        print(f"Visit: https://bqckup.com\n")
+                        print("Visit: https://bqckup.com\n")
                         continue
 
                 if backup.get("incremental"):
@@ -407,7 +407,7 @@ class Bqckup:
                 
             print(f"[{backup.get('name')}] Error: {e}.")
 
-    def incremental_backup(self, config: dict[str, Any]):
+    def incremental_backup(self, config: dict[str, Any], include_database: bool = False):
         time_start = time.time()
 
         if not config.get("enabled"):
@@ -415,7 +415,7 @@ class Bqckup:
             return
 
         if config.get("options").get("provider") != "s3":
-            raise RuntimeError("")  # TODO: write error message
+            raise RuntimeError("Currently, incremental backup only support S3 provider")
 
         if (
             Log()
@@ -424,7 +424,7 @@ class Bqckup:
             .exists()
         ):
             print(f"Backup for {config['name']} is already running...")
-            return  # TODO: idk
+            return
 
         logs: Log = Log().write(
             {
@@ -440,19 +440,37 @@ class Bqckup:
 
         sources: list = config["path"]
 
+        # Database backup
         db_dump_path = self.backup_database(config)
-        sources.append(db_dump_path)
+        if include_database:
+            sources.append(db_dump_path)
+        else:
+            print(f"Uploading {db_dump_path}...")
+            s3(storage_name=config.get("options").get("storage")).upload(
+                db_dump_path, Path(config.get("name")) / get_today() / db_dump_path.name
+            )
 
         if Config().read("bqckup", "config_backup"):
             sources += (STORAGE_CONFIG_PATH,)  # TODO: later
 
         result = None
-        with ProgressSpinner("Backing up..."):
+        with ProgressSpinner("doing incremental backup..."):
             result = Rustic.backup(sources)
 
+        print("=========================================")
+        print("Backup complete")
+        print("New Files\t:", result["new"])
+        print("Changed Files\t:", result["changed"])
+        print("Unchanged Files\t:", result["unchanged"])
+        print("Data Uploaded\t:", format_size(result["uploaded"]))
+        print("Total Size\t:", format_size(result["total_size"]))
+        print("Time Consumed\t:", format_timespan(result["total_duration"]))
+        print("=========================================")
+
+        # Save backup in local
         should_save_locally = config.get("options").get("save_locally")
         save_locally_path = Path(
-            config.get("options").get("save_locally_path")
+            config.get("options").get("save_locally_path", "/etc/bqckup/tmp")
         )  # If not set it will be at /etc/bqckup/tmp
 
         if not should_save_locally:
@@ -460,28 +478,27 @@ class Bqckup:
         elif should_save_locally and save_locally_path:
             print("Saving locally ...")
 
-            if not save_locally_path.is_dir():
-                raise Exception(
-                    f"Save locally path {save_locally_path} is not a directory"
-                )
+            # TODO: keep or delete?
+            # if not save_locally_path.is_dir():
+            #     raise Exception(
+            #         f"Save locally path {save_locally_path} is not a directory"
+            #     )
 
-            save_locally_path: Path = save_locally_path / config["name"]
-            if not save_locally_path.is_dir():  # if directory not exists
-                save_locally_path.mkdir(parents=True, exist_ok=True)
+            # save_locally_path: Path = save_locally_path / config["name"]
+            # if not save_locally_path.is_dir():  # if directory not exists; create
+            #     save_locally_path.mkdir(parents=True, exist_ok=True)
 
-            shutil.move(db_dump_path, save_locally_path)
+            # shutil.move(db_dump_path, save_locally_path)
+        # end
 
-        Log().update(file_size=result.get("size", 0)).where(Log.id == logs.id).execute()
+        # Update log status
+        logs.update(file_size=result.get("uploaded", 0)).execute()
         Log().update_status(
             logs.id, Log.__SUCCESS__, "File Backup Success", time.time() - time_start
         )
 
     def backup_database(self, config: dict) -> Path:
-        """_summary_
-
-        Args:
-            config (dict):
-
+        """
         Returns:
             Path: return path to exported database
         """
