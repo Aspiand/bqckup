@@ -1,7 +1,8 @@
 from pathlib import Path
 from typing import Any
-from pprint import pprint # TODO: remove this
+from pprint import pprint  # TODO: remove this
 import json
+import toml
 import os
 import subprocess
 
@@ -42,14 +43,13 @@ class Rustic:
         #         name: database
         #     options:
         #         storage: dummy
-        #         interval: daily # can be daily, weekly, monthly 
+        #         interval: daily # can be daily, weekly, monthly
         #         retention: '7'
         #         follow_symlink: no
         #         save_locally: no
         #         save_locally_path: /etc/bqckup/tmp
         #         notification_email: email@example.com
         #         provider: s3
-
         # # Selected by options on Site Config
         # Storage Config:
         #     bucket: dummy
@@ -109,58 +109,47 @@ class Rustic:
             RusticConfigError: password empty
         """
 
-        rustic_config = self.site_config.get("rustic")
+        rustic_config: dict | None = self.site_config.get("rustic")
 
         # If rustic field not found
         if rustic_config is None:
-            raise RusticConfigError("field not found")
+            raise RusticConfigError("Rustic not configured")
 
         if rustic_config.get("password") is None:
-            raise RusticConfigError("password empty")
+            raise RusticConfigError("Password can't be empty")
 
         if rustic_config.get("config_path"):
             ...  # TODO: handle this?
             # if set; use this instead default path
 
-    def dump_config(self, path: str = None) -> str:
+    def dump_config(self) -> Path:
         """Generate rustic config parsed from storage and site config"""
 
-        # use library?
-        content = f"""# GENERATED FILE. DON'T CHANGE THIS!.
-[repository]
-repository = "opendal:s3"
-password = "{self.site_config["rustic"]["password"]}"
+        config = {
+            "repository": {
+                "repository": "opendal:s3",
+                "password": f"{self.site_config["rustic"]["password"]}",
+                "options": {
+                    "access_key_id": self.storage_config["access_key_id"],
+                    "secret_access_key": self.storage_config["secret_access_key"],
+                    "region": self.storage_config["region"],
+                    "bucket": self.storage_config["bucket"],
+                    "endpoint": self.storage_config["endpoint"],
+                    "root": f"/ip/{self.site_config["name"]}/incremental",
+                },
+            },
+            "backup": {
+                "json": True,
+                "snapshots": [{"sources": self.site_config["path"]}],
+            },
+            "forget": {"keep-daily": int(self.site_config["options"]["retention"])},
+        }
 
-[repository.options]
-access_key_id = "{self.storage_config["access_key_id"]}"
-secret_access_key = "{self.storage_config["secret_access_key"]}"
-region = "{self.storage_config["region"]}"
-bucket = "{self.storage_config["bucket"]}"
-endpoint = "{self.storage_config["endpoint"]}"
-root = "/ip/{self.site_config["name"]}/incremental"
+        config_path = Path(RUSTIC_CONFIG_PATH) / (self.site_config["name"] + ".toml")
+        with open(config_path, "w") as f:
+            toml.dump(config, f)
 
-[backup]
-json = true
-
-[[backup.snapshots]]
-sources = [""] # TODO: later
-
-[forget]
-keep-daily={self.site_config["options"]["retention"]}
-"""
-        config_path = (
-            path
-            if path
-            else (Path(RUSTIC_CONFIG_PATH) / self.site_config["name"]).with_suffix(
-                ".toml"
-            )
-        )
-
-        pprint(content)
-        # with open(config_path, "w") as f:
-        #     f.writelines(content)
-
-    # Membuat file konfigurasi rustic berdasarkan dari storage.yml dan domain.yml' jika tidak menggunakan environment variable
+        return config_path
 
 
 # Storage().get_storage_detail(backup.get("options").get("storage")) -> get_primary_storage
@@ -196,3 +185,5 @@ keep-daily={self.site_config["options"]["retention"]}
 
 # ❯ rustic --use-profile ~/.config/rustic/aspian repoinfo
 # [INFO] using config /home/pc/.config/rustic/aspian.toml
+
+# rustic -P aspian -> use config from /etc/rustic with file name aspian.toml
