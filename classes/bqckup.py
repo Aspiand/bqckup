@@ -1,4 +1,3 @@
-from pprint import pprint
 import os, time, shutil, signal, sys
 from typing import Any
 from classes.database import Database
@@ -17,7 +16,7 @@ from constant import BQ_PATH, STORAGE_CONFIG_PATH, SITE_CONFIG_PATH
 from datetime import datetime
 from helpers.file import remove_folder
 from hashlib import sha256
-from pathlib import Path, PurePath
+from pathlib import Path
 from lib.notifications.discord import send_notification
 from helpers.datetime import time_since, get_today, difference_in_days, interval_in_number
 from helpers.network import get_server_ip
@@ -198,8 +197,6 @@ class Bqckup:
                 else:
                     self.do_backup(backup)
             except Exception as e:
-                import traceback
-                traceback.print_exc()
                 print(f"[red]Error during backup for {backup['name']}: {e}[/red]")
                 continue
     

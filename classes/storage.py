@@ -1,11 +1,10 @@
 from classes.yml_parser import Yml_Parser
 from constant import STORAGE_CONFIG_PATH
 
-class StorageException(Exception): ...
-
+class StorageException(Exception): pass
 class Storage:
-    def __init__(self, path: str = STORAGE_CONFIG_PATH):
-        self.parsed_storage = Yml_Parser.parse(path)
+    def __init__(self):
+        self.parsed_storage = Yml_Parser.parse(STORAGE_CONFIG_PATH)
 
     def get_parsed_storage(self):
         return self.parsed_storage
@@ -14,7 +13,7 @@ class Storage:
         try:
             return list(self.parsed_storage['storages'].keys())
         except:
-            return []
+            return list()
 
     def get_storage_detail(self, name: str) -> dict:
         try:

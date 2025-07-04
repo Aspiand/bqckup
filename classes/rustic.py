@@ -58,14 +58,14 @@ class Rustic:
         self.check_config()
         self.dump_config()
 
-    def backup(self) -> dict[str, int]:
+    def backup(self) -> dict[str, int | str]:
         """Running Backup
-
-        Args:
-            sources (list[str]): additional locations to backup
 
         Raises:
             RusticError: rustic return code not 0
+
+        Returns:
+            dict: detail information about backup action
         """
 
         output: CompletedProcess = subprocess.run(
@@ -107,23 +107,17 @@ class Rustic:
 
         rustic_config: dict | None = self.site_config.get("rustic")
 
-        # If rustic field not found
         if rustic_config is None:
             raise RusticConfigError("Rustic not configured")
 
         if rustic_config.get("password") is None:
             raise RusticConfigError("Password can't be empty")
 
-        if rustic_config.get("config_path"):
-            ...  # TODO: handle this?
-            # if set; use this instead default path
-
     def dump_config(self) -> Path:
         """Generate rustic config parsed from storage and site config"""
 
-        config = {  # ref: https://github.com/rustic-rs/rustic/tree/main/config
+        config = {
             "global": {
-                # "check-index": True,
                 "no-progress": True,
                 "log-level": "info",
             },
