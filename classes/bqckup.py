@@ -198,7 +198,7 @@ class Bqckup:
                 else:
                     self.do_backup(backup)
             except Exception as e:
-                import traceback # TODO: remove this
+                import traceback
                 traceback.print_exc()
                 print(f"[red]Error during backup for {backup['name']}: {e}[/red]")
                 continue
@@ -431,7 +431,7 @@ class Bqckup:
         logs: Log = Log().write(
             {
                 "name": config["name"],
-                "file_path": "/dev/null",  # TODO: change value
+                "file_path": "/dev/null", # replaced by snapshots id
                 "description": "File backup is in progress...",
                 "type": Log.__FILES__,
                 "storage": config["options"]["storage"],
@@ -455,23 +455,27 @@ class Bqckup:
             )
 
         if Config().read("bqckup", "config_backup"):
-            sources += (STORAGE_CONFIG_PATH,)  # TODO: later
+            sources += (
+                STORAGE_CONFIG_PATH,
+                os.path.join(SITE_CONFIG_PATH, config["name"]) + ".yml"
+            )
 
         try:
             with ProgressSpinner("doing incremental backup..."):
                 result = rustic.backup(sources)
-            logs.update(
+            Log.update(
                 status=Log.__SUCCESS__,
                 time_consume=time.time() - time_start,
+                file_path=result["id"],  # rustic snapshots id
                 description="File Backup Success",
-            ).execute()
+            ).where(Log.id == logs.id).execute()
 
         except RusticError as e:
-            logs.update(
+            Log.update(
                 status=Log.__FAILED__,
                 time_consume=time.time() - time_start,
                 description=f"File Backup Failed: {e}",
-            ).execute()
+            ).where(Log.id == logs.id).execute()
             self._send_notification(config.get("name"), f"Error: {e}")
             print(f"[{config['name']}] Error: {e}")
             return
@@ -555,23 +559,23 @@ class Bqckup:
             )
 
         current_size = backup_path.stat().st_size
-        current_log.update(
+        Log.update(
             file_size=current_size,
             status=Log.__SUCCESS__,
             time_consume=time.time() - time_start,
             description="Database Backup Success",
-        ).execute()
+        ).where(Log.id == current_log.id).execute()
 
         if last_log:
             previous_size = format_size(last_log.file_size)
-            time_consume = format_timespan(last_log.time_consume)
+            time_consume = format_timespan(current_log.time_consume)
             current_size = format_size(current_size)
 
             print("=========================================")
             print("Database Compressed")
             print(f"Previous Size\t: {previous_size}")
             print(f"Current Size\t: {current_size}")
-            print(f"Time Consumed\t: {time_consume}")  # Q: last_log ??
+            print(f"Time Consumed\t: {time_consume}")
             print("=========================================")
 
             if previous_size == current_size:
@@ -580,10 +584,6 @@ class Bqckup:
                 )
 
         return backup_path
-
-        # TODO: clean temporary file
-        # if backup_path.exists():
-        #     backup_path.unlink(missing_ok=True)
 
     def remove(self):
         pass

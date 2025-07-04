@@ -1,6 +1,5 @@
 from pathlib import Path
 from typing import Any
-from pprint import pprint  # TODO: remove this
 from subprocess import CompletedProcess
 import json
 import toml
@@ -57,7 +56,7 @@ class Rustic:
             "check": True,
         }
         self.check_config()
-        self.dump_config()
+        self.dump_config(self.site_config.get("rustic").get("config_path"))
 
     def backup(self, sources: list[str]) -> dict[str, int]:
         """Running Backup
@@ -70,16 +69,25 @@ class Rustic:
         """
 
         output: CompletedProcess = subprocess.run(
-            ["rustic", "backup", "--use-profile", self.site_config["name"], *sources],
+            [
+                "rustic",
+                "backup",
+                "--init",
+                "--use-profile",
+                self.site_config["name"],
+                *sources,
+            ],
             **self.__subprocess_args,
         )
 
         if output.returncode != 0:
             raise RusticError(output.stderr)
 
-        summary: dict = json.loads(output.stdout)["summary"]
+        parsed_output: dict = json.loads(output.stdout)
+        summary = parsed_output["summary"]
 
         return {
+            "id": parsed_output["id"][:8],  # get only 8 characters from start
             "new": summary["files_new"],
             "changed": summary["files_changed"],
             "unchanged": summary["files_unmodified"],
@@ -111,15 +119,14 @@ class Rustic:
             ...  # TODO: handle this?
             # if set; use this instead default path
 
-    def dump_config(self) -> Path:
+    def dump_config(self, path: str = None) -> Path:
         """Generate rustic config parsed from storage and site config"""
 
-        config = {  # https://github.com/rustic-rs/rustic/tree/main/config
+        config = {  # ref: https://github.com/rustic-rs/rustic/tree/main/config
             "global": {
                 # "check-index": True,
                 "no-progress": True,
                 "log-level": "info",
-                # "use-profiles": [self.site_config["name"]],
             },
             "repository": {
                 "repository": "opendal:s3",
@@ -130,11 +137,11 @@ class Rustic:
                     "region": self.storage_config["region"],
                     "bucket": self.storage_config["bucket"],
                     "endpoint": self.storage_config["endpoint"],
-                    "root": f"/ip/{self.site_config['name']}/incremental",
+                    "root": f"/{self.site_config['name']}/incremental",
                 },
             },
             "backup": {
-                "init": True,  # Create repository if not exists
+                # "init": True,  # Create repository if not exists ### not work
                 "json": True,  # Output in json
                 "no-scan": True,
                 "git-ignore": True,
@@ -147,47 +154,16 @@ class Rustic:
             "forget": {"keep-daily": int(self.site_config["options"]["retention"])},
         }
 
-        config_path: Path = Path(RUSTIC_CONFIG_PATH)
-        if not config_path.is_dir():  # if not exists
-            config_path.mkdir(mode=500)
+        config_dir: Path = Path(Path(path).parent if path else RUSTIC_CONFIG_PATH)
+        config_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        config_path = (
+            Path(path) if path else config_dir / (self.site_config["name"] + ".toml")
+        )
 
-        config_path = config_path / (self.site_config["name"] + ".toml")
-        with open(config_path, "w") as f:
+        with config_path.open("w") as f:
             toml.dump(config, f)
 
-        # Change permission to .rw-------
-        config_path.chmod(0o600)  # for better security
+        # Change permission to `.rw-------` for better security
+        config_path.chmod(0o600)
 
         return config_path
-
-
-# Storage().get_storage_detail(backup.get("options").get("storage")) -> get_primary_storage
-
-# TODO
-# check connection
-# check repository available
-# key subcommand # Important
-# check repository avaibility
-
-# secrets -> env???
-# - delete secrets from rustic config
-# - define aws env variable
-# - test
-
-# rustic exclude -> --glob="!pattern*"
-
-# NOTE
-# from playhouse.shortcuts import model_to_dict
-# REPOSITORY -> $ROOT/domain/incremental
-
-# https://github.com/langgenius/dify/issues/12200
-# OPENDAL_S3_ENDPOINT
-# OPENDAL_S3_REGION
-# OPENDAL_S3_BUCKET
-# OPENDAL_S3_ACCESS_KEY_ID
-# OPENDAL_S3_SECRET_ACCESS_KEY
-
-# ❯ rustic --use-profile ~/.config/rustic/aspian repoinfo
-# [INFO] using config /home/pc/.config/rustic/aspian.toml
-
-# rustic -P aspian -> use config from /etc/rustic with file name aspian.toml
