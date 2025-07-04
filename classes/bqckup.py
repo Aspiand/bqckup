@@ -438,7 +438,7 @@ class Bqckup:
 
         print(f"[green]Starting backup for {config['name']}[/green]\n")
         sources, result = [], None
-        rustic:Rustic = Rustic(config, Yml_Parser.parse(STORAGE_CONFIG_PATH)["storages"]),
+        rustic:Rustic = Rustic(config, Yml_Parser.parse(STORAGE_CONFIG_PATH)["storages"])
 
         # Database backup
         db_dump_path = self.backup_database(config)
@@ -453,21 +453,24 @@ class Bqckup:
         if Config().read("bqckup", "config_backup"):
             sources += (STORAGE_CONFIG_PATH,)  # TODO: later
 
-        with ProgressSpinner("doing incremental backup..."):
-            try:
+        try:
+            with ProgressSpinner("doing incremental backup..."):
                 result = rustic.backup(sources)
-                log_status, log_desc = Log.__SUCCESS__, "File Backup Success"
-            except RusticError as e:
-                log_status, log_desc = Log.__FAILED__, f"File Backup Failed: {e}"
-                self._send_notification(config.get("name"), f"Error: {e}")
-                print(f"[{config["name"]}] Error: {e}")
-                return
-            finally:
-                logs.update(
-                    status=log_status,
-                    time_consume=time.time() - time_start,
-                    description=log_desc,
-                ).execute()
+            logs.update(
+                status=Log.__SUCCESS__,
+                time_consume=time.time() - time_start,
+                description="File Backup Success",
+            ).execute()
+
+        except RusticError as e:
+            logs.update(
+                status=Log.__FAILED__,
+                time_consume=time.time() - time_start,
+                description=f"File Backup Failed: {e}",
+            ).execute()
+            self._send_notification(config.get("name"), f"Error: {e}")
+            print(f"[{config['name']}] Error: {e}")
+            return
 
         print("=========================================")
         print("Backup complete")

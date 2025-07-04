@@ -83,7 +83,7 @@ class Rustic:
         """
 
         output: CompletedProcess = subprocess.run(
-            ["rustic", "backup", "--use-profile", self.site_config["name"], sources],
+            ["rustic", "backup", "--use-profile", self.site_config["name"], *sources],
             **self.__subprocess_args,
         )
 
@@ -136,7 +136,7 @@ class Rustic:
             },
             "repository": {
                 "repository": "opendal:s3",
-                "password": self.site_config["rustic"]["password"],
+                "password": str(self.site_config["rustic"]["password"]),
                 "options": {
                     "access_key_id": self.storage_config["access_key_id"],
                     "secret_access_key": self.storage_config["secret_access_key"],
