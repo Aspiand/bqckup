@@ -56,9 +56,9 @@ class Rustic:
             "check": True,
         }
         self.check_config()
-        self.dump_config(self.site_config.get("rustic").get("config_path"))
+        self.dump_config()
 
-    def backup(self, sources: list[str]) -> dict[str, int]:
+    def backup(self) -> dict[str, int]:
         """Running Backup
 
         Args:
@@ -75,7 +75,6 @@ class Rustic:
                 "--init",
                 "--use-profile",
                 self.site_config["name"],
-                *sources,
             ],
             **self.__subprocess_args,
         )
@@ -119,7 +118,7 @@ class Rustic:
             ...  # TODO: handle this?
             # if set; use this instead default path
 
-    def dump_config(self, path: str = None) -> Path:
+    def dump_config(self) -> Path:
         """Generate rustic config parsed from storage and site config"""
 
         config = {  # ref: https://github.com/rustic-rs/rustic/tree/main/config
@@ -154,11 +153,9 @@ class Rustic:
             "forget": {"keep-daily": int(self.site_config["options"]["retention"])},
         }
 
-        config_dir: Path = Path(Path(path).parent if path else RUSTIC_CONFIG_PATH)
+        config_dir: Path = Path(RUSTIC_CONFIG_PATH)
         config_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-        config_path = (
-            Path(path) if path else config_dir / (self.site_config["name"] + ".toml")
-        )
+        config_path: Path = config_dir / (self.site_config["name"] + ".toml")
 
         with config_path.open("w") as f:
             toml.dump(config, f)

@@ -431,38 +431,39 @@ class Bqckup:
         logs: Log = Log().write(
             {
                 "name": config["name"],
-                "file_path": "/dev/null", # replaced by snapshots id
+                "file_path": "/dev/null",  # replaced by snapshots id
                 "description": "File backup is in progress...",
                 "type": Log.__FILES__,
                 "storage": config["options"]["storage"],
             }
         )
 
+        if Config().read("bqckup", "config_backup"):
+            config["path"] += (
+                STORAGE_CONFIG_PATH,
+                os.path.join(SITE_CONFIG_PATH, config["name"]) + ".yml",
+            )
+
         print(f"[green]Starting backup for {config['name']}[/green]\n")
-        sources, result = [], None
-        rustic: Rustic = Rustic(
-            config, Yml_Parser.parse(STORAGE_CONFIG_PATH)["storages"]
-        )
 
         # Database backup
         db_dump_path = self.backup_database(config)
         if include_database:
-            sources.append(db_dump_path)
+            config["path"].append(db_dump_path)
         else:
             print(f"Uploading {db_dump_path}...")
             s3(storage_name=config.get("options").get("storage")).upload(
                 db_dump_path, Path(config.get("name")) / get_today() / db_dump_path.name
             )
 
-        if Config().read("bqckup", "config_backup"):
-            sources += (
-                STORAGE_CONFIG_PATH,
-                os.path.join(SITE_CONFIG_PATH, config["name"]) + ".yml"
-            )
+        rustic: Rustic = Rustic(
+            config, Yml_Parser.parse(STORAGE_CONFIG_PATH)["storages"]
+        )
 
+        result = None
         try:
             with ProgressSpinner("doing incremental backup..."):
-                result = rustic.backup(sources)
+                result = rustic.backup()
             Log.update(
                 status=Log.__SUCCESS__,
                 time_consume=time.time() - time_start,
