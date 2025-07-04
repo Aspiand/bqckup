@@ -2,7 +2,7 @@ from pprint import pprint
 import os, time, shutil, signal, sys
 from typing import Any
 from classes.database import Database
-from classes.rustic import Rustic
+from classes.rustic import Rustic, RusticError
 from classes.storage import Storage
 from classes.tar import Tar
 from classes.file import File
@@ -47,7 +47,7 @@ class Bqckup:
             print(f"[red]{e}[/red]")
             sys.exit()
             
-    def _send_notification(self, backup_name, messages, additional_data):
+    def _send_notification(self, backup_name, messages, additional_data = None):
         fields = [
             {"name": "Server IP", "value": get_server_ip(), "inline": True},
             {"name": "Name", "value": backup_name, "inline": True},
@@ -437,8 +437,8 @@ class Bqckup:
         )
 
         print(f"[green]Starting backup for {config['name']}[/green]\n")
-
-        sources: list = config["path"]
+        sources, result = [], None
+        rustic:Rustic = Rustic(config, Yml_Parser.parse(STORAGE_CONFIG_PATH)["storages"]),
 
         # Database backup
         db_dump_path = self.backup_database(config)
@@ -453,9 +453,21 @@ class Bqckup:
         if Config().read("bqckup", "config_backup"):
             sources += (STORAGE_CONFIG_PATH,)  # TODO: later
 
-        result = None
         with ProgressSpinner("doing incremental backup..."):
-            result = Rustic.backup(sources)
+            try:
+                result = rustic.backup(sources)
+                log_status, log_desc = Log.__SUCCESS__, "File Backup Success"
+            except RusticError as e:
+                log_status, log_desc = Log.__FAILED__, f"File Backup Failed: {e}"
+                self._send_notification(config.get("name"), f"Error: {e}")
+                print(f"[{config["name"]}] Error: {e}")
+                return
+            finally:
+                logs.update(
+                    status=log_status,
+                    time_consume=time.time() - time_start,
+                    description=log_desc,
+                ).execute()
 
         print("=========================================")
         print("Backup complete")
@@ -475,27 +487,21 @@ class Bqckup:
 
         if not should_save_locally:
             db_dump_path.unlink(missing_ok=True)
-        elif should_save_locally and save_locally_path:
-            print("Saving locally ...")
+        # elif should_save_locally and save_locally_path:
+        #     print("Saving locally ...")
 
-            # TODO: keep or delete?
-            # if not save_locally_path.is_dir():
-            #     raise Exception(
-            #         f"Save locally path {save_locally_path} is not a directory"
-            #     )
+        #     # TODO: keep or delete?
+        #     if not save_locally_path.is_dir():
+        #         raise Exception(
+        #             f"Save locally path {save_locally_path} is not a directory"
+        #         )
 
-            # save_locally_path: Path = save_locally_path / config["name"]
-            # if not save_locally_path.is_dir():  # if directory not exists; create
-            #     save_locally_path.mkdir(parents=True, exist_ok=True)
+        #     save_locally_path: Path = save_locally_path / config["name"]
+        #     if not save_locally_path.is_dir():  # if directory not exists; create
+        #         save_locally_path.mkdir(parents=True, exist_ok=True)
 
-            # shutil.move(db_dump_path, save_locally_path)
-        # end
-
-        # Update log status
-        logs.update(file_size=result.get("uploaded", 0)).execute()
-        Log().update_status(
-            logs.id, Log.__SUCCESS__, "File Backup Success", time.time() - time_start
-        )
+        #     shutil.move(db_dump_path, save_locally_path)
+        # # end
 
     def backup_database(self, config: dict) -> Path:
         """
@@ -544,7 +550,12 @@ class Bqckup:
             )
 
         current_size = backup_path.stat().st_size
-        current_log.update(file_size=current_size).execute()
+        current_log.update(
+            file_size=current_size,
+            status=Log.__SUCCESS__,
+            time_consume=time.time() - time_start,
+            description="Database Backup Success",
+        ).execute()
 
         if last_log:
             previous_size = format_size(last_log.file_size)
@@ -562,13 +573,6 @@ class Bqckup:
                 print(
                     f"[red]Based on file size, there is no changes detected for {backup_path}[/red]\n"
                 )
-
-        Log().update_status(
-            current_log.id,
-            Log.__SUCCESS__,
-            "Database Backup Success",
-            time.time() - time_start,
-        )
 
         return backup_path
 

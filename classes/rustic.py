@@ -1,15 +1,18 @@
 from pathlib import Path
 from typing import Any
 from pprint import pprint  # TODO: remove this
+from subprocess import CompletedProcess
 import json
 import toml
-import os
 import subprocess
 
 from constant import RUSTIC_CONFIG_PATH
 
 
 class RusticConfigError(Exception): ...
+
+
+class RusticError(Exception): ...
 
 
 class Rustic:
@@ -61,32 +64,31 @@ class Rustic:
 
         self.site_config = site_config
         self.storage_config = storage_config[site_config["options"]["storage"]]
+        self.__subprocess_args = {
+            "capture_output": True,
+            "text": True,
+            "check": True,
+        }
         self.check_config()
+        self.dump_config()
 
-    def backup(
-        self, sources: list[str], symlink: bool = False, exclude_paths: list[str] = []
-    ) -> dict[str, int]:
-        raise RuntimeError("not avaiable for now")
-        sources = [
-            src
-            for src in sources
-            if Path(src).exists() and not (not symlink and Path(src).is_symlink())
-        ]
+    def backup(self, sources: list[str]) -> dict[str, int]:
+        """Running Backup
 
-        output = subprocess.run(
-            [
-                "rustic",
-                "backup",
-                "--json",
-                # "--git-ignore",
-                "--no-scan",
-                "--one-file-system",
-                # Create repository if not exists
-                "--init",
-                *sources,
-            ],
-            **self.__SUBPROCESS_ARGS,
+        Args:
+            sources (list[str]): additional locations to backup
+
+        Raises:
+            RusticError: rustic return code not 0
+        """
+
+        output: CompletedProcess = subprocess.run(
+            ["rustic", "backup", "--use-profile", self.site_config["name"], sources],
+            **self.__subprocess_args,
         )
+
+        if output.returncode != 0:
+            raise RusticError(output.stderr)
 
         summary: dict = json.loads(output.stdout)["summary"]
 
@@ -125,28 +127,44 @@ class Rustic:
     def dump_config(self) -> Path:
         """Generate rustic config parsed from storage and site config"""
 
-        config = {
+        config = {  # https://github.com/rustic-rs/rustic/tree/main/config
+            "global": {
+                # "check-index": True,
+                "no-progress": True,
+                "log-level": "info",
+                # "use-profiles": [self.site_config["name"]],
+            },
             "repository": {
                 "repository": "opendal:s3",
-                "password": f"{self.site_config["rustic"]["password"]}",
+                "password": self.site_config["rustic"]["password"],
                 "options": {
                     "access_key_id": self.storage_config["access_key_id"],
                     "secret_access_key": self.storage_config["secret_access_key"],
                     "region": self.storage_config["region"],
                     "bucket": self.storage_config["bucket"],
                     "endpoint": self.storage_config["endpoint"],
-                    "root": f"/ip/{self.site_config["name"]}/incremental",
+                    "root": f"/ip/{self.site_config['name']}/incremental",
                 },
             },
             "backup": {
-                "json": True,
+                "init": True,  # Create repository if not exists
+                "json": True,  # Output in json
+                "no-scan": True,
+                "git-ignore": True,
+                "one-file-system": True,
                 "snapshots": [{"sources": self.site_config["path"]}],
+                "globs": [
+                    f"!{i}" for i in self.site_config["exclude_path"]
+                ],  # !/tmp/dir1 # see https://github.com/rustic-rs/rustic/discussions/1194#discussioncomment-10298116
             },
             "forget": {"keep-daily": int(self.site_config["options"]["retention"])},
         }
 
-        config_path = Path(RUSTIC_CONFIG_PATH) / (self.site_config["name"] + ".toml")
-        with open(config_path, "w") as f:
+        config_path: Path = Path(RUSTIC_CONFIG_PATH)
+        if not config_path.is_dir():  # if not exists
+            config_path.mkdir(mode=500)
+
+        with open(config_path / (self.site_config["name"] + ".toml"), "w") as f:
             toml.dump(config, f)
 
         return config_path
