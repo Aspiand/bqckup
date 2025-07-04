@@ -6,6 +6,6 @@ from constant import SITE_CONFIG_PATH, STORAGE_CONFIG_PATH
 
 if __name__ == "__main__":
     Rustic(
-        Yml_Parser.parse((Path(SITE_CONFIG_PATH) / "aspian.my.id").__str__())["bqckup"],
+        Yml_Parser.parse((Path(SITE_CONFIG_PATH) / "aspian.my.id.yml").__str__())["bqckup"],
         Yml_Parser.parse(STORAGE_CONFIG_PATH)["storages"]
     ).dump_config()

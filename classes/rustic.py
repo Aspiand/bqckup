@@ -17,19 +17,6 @@ class RusticError(Exception): ...
 
 class Rustic:
     def __init__(self, site_config: dict[str, Any], storage_config: dict[str, Any]):
-        # self.__SUBPROCESS_ARGS = {
-        #     "capture_output": True,
-        #     "text": True,
-        #     "env": os.environ.copy()
-        #     | {
-        #         "RUSTIC_NO_PROGRESS": "true",
-        #         "RUSTIC_LOG_LEVEL": "info",
-        #         # "RUSTIC_REPOSITORY": "opendal:S3",
-        #     },
-        #     # https://github.com/rustic-rs/rustic/tree/main/config
-        #     # https://github.com/langgenius/dify/issues/12200
-        # }
-
         # Site Config:
         #     name: domain
         #     enabled: no
@@ -164,8 +151,12 @@ class Rustic:
         if not config_path.is_dir():  # if not exists
             config_path.mkdir(mode=500)
 
-        with open(config_path / (self.site_config["name"] + ".toml"), "w") as f:
+        config_path = config_path / (self.site_config["name"] + ".toml")
+        with open(config_path, "w") as f:
             toml.dump(config, f)
+
+        # Change permission to .rw-------
+        config_path.chmod(0o600)  # for better security
 
         return config_path
 
@@ -175,11 +166,6 @@ class Rustic:
 # TODO
 # check connection
 # check repository available
-# exclude direct to rustic command
-# get_latest backup
-# keep n
-# handle error
-# handle error pada scoope paling tinggi (run) -> log
 # key subcommand # Important
 # check repository avaibility
 

@@ -407,7 +407,9 @@ class Bqckup:
                 
             print(f"[{backup.get('name')}] Error: {e}.")
 
-    def incremental_backup(self, config: dict[str, Any], include_database: bool = False):
+    def incremental_backup(
+        self, config: dict[str, Any], include_database: bool = False
+    ) -> None:
         time_start = time.time()
 
         if not config.get("enabled"):
@@ -438,7 +440,9 @@ class Bqckup:
 
         print(f"[green]Starting backup for {config['name']}[/green]\n")
         sources, result = [], None
-        rustic:Rustic = Rustic(config, Yml_Parser.parse(STORAGE_CONFIG_PATH)["storages"])
+        rustic: Rustic = Rustic(
+            config, Yml_Parser.parse(STORAGE_CONFIG_PATH)["storages"]
+        )
 
         # Database backup
         db_dump_path = self.backup_database(config)
@@ -490,21 +494,19 @@ class Bqckup:
 
         if not should_save_locally:
             db_dump_path.unlink(missing_ok=True)
-        # elif should_save_locally and save_locally_path:
-        #     print("Saving locally ...")
+        elif should_save_locally and save_locally_path:
+            print("Saving locally ...")
 
-        #     # TODO: keep or delete?
-        #     if not save_locally_path.is_dir():
-        #         raise Exception(
-        #             f"Save locally path {save_locally_path} is not a directory"
-        #         )
+            if not save_locally_path.is_dir():
+                raise Exception(
+                    f"Save locally path {save_locally_path} is not a directory"
+                )
 
-        #     save_locally_path: Path = save_locally_path / config["name"]
-        #     if not save_locally_path.is_dir():  # if directory not exists; create
-        #         save_locally_path.mkdir(parents=True, exist_ok=True)
+            save_locally_path: Path = save_locally_path / config["name"]
+            if not save_locally_path.is_dir():  # if directory not exists; create
+                save_locally_path.mkdir(parents=True, exist_ok=True)
 
-        #     shutil.move(db_dump_path, save_locally_path)
-        # # end
+            shutil.move(db_dump_path, save_locally_path)
 
     def backup_database(self, config: dict) -> Path:
         """
