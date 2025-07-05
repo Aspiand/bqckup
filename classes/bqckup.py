@@ -425,22 +425,6 @@ class Bqckup:
             print(f"Backup for {config['name']} is already running...")
             return
 
-        logs: Log = Log().write(
-            {
-                "name": config["name"],
-                "file_path": "/dev/null",  # replaced by snapshots id
-                "description": "File backup is in progress...",
-                "type": Log.__FILES__,
-                "storage": config["options"]["storage"],
-            }
-        )
-
-        if Config().read("bqckup", "config_backup"):
-            config["path"] += (
-                STORAGE_CONFIG_PATH,
-                os.path.join(SITE_CONFIG_PATH, config["name"]) + ".yml",
-            )
-
         print(f"[green]Starting backup for {config['name']}[/green]\n")
 
         # Database backup
@@ -452,41 +436,6 @@ class Bqckup:
             s3(storage_name=config.get("options").get("storage")).upload(
                 db_dump_path, Path(config.get("name")) / get_today() / db_dump_path.name
             )
-
-        rustic: Rustic = Rustic(
-            config, Yml_Parser.parse(STORAGE_CONFIG_PATH)["storages"]
-        )
-
-        result = None
-        try:
-            with ProgressSpinner("doing incremental backup..."):
-                result = rustic.backup()
-            Log.update(
-                status=Log.__SUCCESS__,
-                time_consume=time.time() - time_start,
-                file_path=result["id"],  # rustic snapshots id
-                description="File Backup Success",
-            ).where(Log.id == logs.id).execute()
-
-        except RusticError as e:
-            Log.update(
-                status=Log.__FAILED__,
-                time_consume=time.time() - time_start,
-                description=f"File Backup Failed: {e}",
-            ).where(Log.id == logs.id).execute()
-            self._send_notification(config.get("name"), f"Error: {e}")
-            print(f"[{config['name']}] Error: {e}")
-            return
-
-        print("=========================================")
-        print("Backup complete")
-        print("New Files\t:", result["new"])
-        print("Changed Files\t:", result["changed"])
-        print("Unchanged Files\t:", result["unchanged"])
-        print("Data Uploaded\t:", format_size(result["uploaded"]))
-        print("Total Size\t:", format_size(result["total_size"]))
-        print("Time Consumed\t:", format_timespan(result["total_duration"]))
-        print("=========================================")
 
         # Save backup in local
         should_save_locally = config.get("options").get("save_locally")
@@ -509,6 +458,61 @@ class Bqckup:
                 save_locally_path.mkdir(parents=True, exist_ok=True)
 
             shutil.move(db_dump_path, save_locally_path)
+
+        # File backup
+        try:
+            logs: Log = Log().write(
+                {
+                    "name": config["name"],
+                    "file_path": "/dev/null",  # replaced by snapshots id
+                    "description": "File backup is in progress...",
+                    "type": Log.__FILES__,
+                    "storage": config["options"]["storage"],
+                }
+            )
+
+            if Config().read("bqckup", "config_backup"):
+                config["path"] += (
+                    STORAGE_CONFIG_PATH,
+                    os.path.join(SITE_CONFIG_PATH, config["name"]) + ".yml",
+                )
+
+            rustic: Rustic = Rustic(
+                config, Yml_Parser.parse(STORAGE_CONFIG_PATH)["storages"]
+            )
+
+            result = None
+
+            with ProgressSpinner("doing incremental backup..."):
+                result = rustic.backup()
+
+            Log.update(
+                status=Log.__SUCCESS__,
+                time_consume=time.time() - time_start,
+                file_size=result["total_size"],
+                file_path=result["id"],  # rustic snapshots id
+                description="File Backup Success",
+            ).where(Log.id == logs.id).execute()
+
+            print("=========================================")
+            print("Backup complete")
+            print("New Files\t:", result["new"])
+            print("Changed Files\t:", result["changed"])
+            print("Unchanged Files\t:", result["unchanged"])
+            print("Data Uploaded\t:", format_size(result["uploaded"]))
+            print("Total Size\t:", format_size(result["total_size"]))
+            print("Time Consumed\t:", format_timespan(result["total_duration"]))
+            print("=========================================")
+
+        except Exception as e:
+            Log.update(
+                status=Log.__FAILED__,
+                time_consume=time.time() - time_start,
+                description=f"File Backup Failed: {e}",
+            ).where(Log.id == logs.id).execute()
+            self._send_notification(config.get("name"), f"Error: {e}")
+            print(f"[{config['name']}] Error: {e}")
+            return
 
     def backup_database(self, config: dict) -> Path:
         """
