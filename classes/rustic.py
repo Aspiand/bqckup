@@ -1,11 +1,12 @@
 from pathlib import Path
 from typing import Any
-from subprocess import CompletedProcess
+from subprocess import CompletedProcess, CalledProcessError
 import json
 import toml
 import subprocess
 
 from constant import RUSTIC_CONFIG_PATH
+from classes.config import Config as bqckup_config
 
 
 class RusticConfigError(Exception): ...
@@ -58,6 +59,33 @@ class Rustic:
         self.check_config()
         self.dump_config()
 
+    @property
+    def root_folder_name(self):
+        return bqckup_config().read("bqckup", "root_folder_name")
+
+    @property
+    def snapshots(self) -> list[dict[str, Any]]:
+        output: CompletedProcess = subprocess.run(
+            [
+                "rustic",
+                "snapshots",
+                "--use-profile",
+                self.site_config["name"],
+                "--json",
+            ],
+            **self.__subprocess_args,
+        )
+
+        parsed_output = json.loads(output.stdout)
+
+        try:
+            return parsed_output[0][1]
+        except IndexError:
+            return []
+            # raise RusticError("No snapshots found") # TODO: RusticSnapshotNotFound or return 0 ?
+        except Exception as e:
+            raise RusticError("Error while getting snapshots:", e)
+
     def backup(self) -> dict[str, int | str]:
         """Running Backup
 
@@ -97,6 +125,22 @@ class Rustic:
             "total_size": summary["total_bytes_processed"],
         }
 
+    def restore(self):
+        if len(self.snapshots) < 1:
+            raise RusticError("No snapshots found.")
+
+        for path in self.site_config["path"]:
+            command = [
+                "rustic",
+                "--use-profile",
+                self.site_config["name"],
+                "restore",
+                f"latest:{path}",
+                path,
+            ]
+
+            subprocess.run(command, **self.__subprocess_args)
+
     def check_config(self):
         """Check rustic configuration from sites
 
@@ -131,7 +175,7 @@ class Rustic:
                     "region": self.storage_config["region"],
                     "bucket": self.storage_config["bucket"],
                     "endpoint": self.storage_config["endpoint"],
-                    "root": f"/{self.site_config['name']}/incremental",
+                    "root": f"/{self.root_folder_name}/{self.site_config['name']}/incremental",
                 },
             },
             "backup": {

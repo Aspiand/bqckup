@@ -1,4 +1,5 @@
 import getpass
+from typing_extensions import Annotated
 import typer
 import os
 import requests
@@ -7,11 +8,13 @@ import ruamel.yaml as yaml
 from classes.bqckup import Bqckup
 from classes.database import Database
 from classes.config import Config
+from classes.progress import ProgressSpinner
+from classes.rustic import Rustic
 from classes.storage import Storage
 from classes.s3 import s3
 from pathlib import Path
 from typing import List
-from constant import VERSION, SITE_CONFIG_PATH, BQ_PATH
+from constant import STORAGE_CONFIG_PATH, VERSION, SITE_CONFIG_PATH, BQ_PATH
 from rich import print
 from rich.console import Group, Console
 from rich.table import Table
@@ -620,6 +623,29 @@ def download_latest(name: str, target: str = None, silent: bool = False):
     except Exception as e:
         print(f"[red]An error occurred: {e}[/red]")
 
+@bq_cli.command()
+def restore(site:str):
+    """Restore for incremental backup"""
+
+    from classes.yml_parser import Yml_Parser
+
+    bqckup = Bqckup()
+    storage = Yml_Parser.parse(STORAGE_CONFIG_PATH)["storages"]
+
+    # TODO: ignore validate config error while path not found
+
+    for _, v in bqckup.list().items():
+        if not bqckup.validate_config(v["name"]):
+            continue
+
+    if not isinstance(site, dict):
+        print(f"[red]Site [bold]{site}[/bold] not found![/red]")
+        return
+
+    with ProgressSpinner("Restoring backups..."):
+        Rustic(site, storage).restore()
+
+    print("[bold green]Restore complete![/bold green]")
 
 def get_version(version: bool):
     if version:
@@ -646,9 +672,9 @@ def common(
 
 
 if __name__ == "__main__":
-    if getpass.getuser() != "root":
-        print("Please run this script as root user")
-    else:
+    # if getpass.getuser() != "root":
+    #     print("Please run this script as root user")
+    # else:
         from app import initialization
 
         try:
