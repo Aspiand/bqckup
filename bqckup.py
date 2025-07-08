@@ -623,29 +623,38 @@ def download_latest(name: str, target: str = None, silent: bool = False):
     except Exception as e:
         print(f"[red]An error occurred: {e}[/red]")
 
+
 @bq_cli.command()
-def restore(site:str):
+def restore(site: str, snapshot: str = "latest"):
     """Restore for incremental backup"""
 
     from classes.yml_parser import Yml_Parser
 
     bqckup = Bqckup()
-    storage = Yml_Parser.parse(STORAGE_CONFIG_PATH)["storages"]
-
-    # TODO: ignore validate config error while path not found
 
     for _, v in bqckup.list().items():
-        if not bqckup.validate_config(v["name"]):
-            continue
+        if site_name := v.get("name"):
+            if site_name != site:
+                continue
 
-    if not isinstance(site, dict):
-        print(f"[red]Site [bold]{site}[/bold] not found![/red]")
-        return
+            # Create directory if not exists
+            if (paths := v.get("path")) and isinstance(paths, list):
+                for p in paths:
+                    Path(p).mkdir(parents=True, exist_ok=True)
 
-    with ProgressSpinner("Restoring backups..."):
-        Rustic(site, storage).restore()
+            if not bqckup.validate_config(site_name):
+                print(f"Invalid configuration for {site_name}")
 
-    print("[bold green]Restore complete![/bold green]")
+            with ProgressSpinner("Restoring backups..."):
+                Rustic(
+                    bqckup.detail(site_name),
+                    Yml_Parser.parse(STORAGE_CONFIG_PATH)["storages"],
+                ).restore(snapshot=snapshot)
+
+            print("[bold green]Restore complete![/bold green]")
+            return
+
+    print(f"[red]Site [bold]{site}[/bold] not found![/red]")
 
 def get_version(version: bool):
     if version:

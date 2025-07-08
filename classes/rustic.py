@@ -1,3 +1,4 @@
+from os.path import join as path_join
 from pathlib import Path
 from typing import Any
 from subprocess import CompletedProcess, CalledProcessError
@@ -5,7 +6,7 @@ import json
 import toml
 import subprocess
 
-from constant import RUSTIC_CONFIG_PATH
+from constant import RUSTIC_CONFIG_PATH, STORAGE_CONFIG_PATH, SITE_CONFIG_PATH
 from classes.config import Config as bqckup_config
 
 
@@ -48,6 +49,13 @@ class Rustic:
         #     region: dummy
         #     endpoint: dummy
         #     primary: no
+
+        # Include config file
+        if bqckup_config().read("bqckup", "config_backup"):
+            site_config["path"] += (
+                STORAGE_CONFIG_PATH,
+                path_join(SITE_CONFIG_PATH, site_config["name"]) + ".yml",
+            )
 
         self.site_config = site_config
         self.storage_config = storage_config[site_config["options"]["storage"]]
@@ -125,7 +133,16 @@ class Rustic:
             "total_size": summary["total_bytes_processed"],
         }
 
-    def restore(self):
+    def restore(self, snapshot: str):
+        """Restore backup
+
+        Args:
+            snapshot (str): snapshot id or latest
+
+        Raises:
+            RusticError: No snapshots available
+        """
+
         if len(self.snapshots) < 1:
             raise RusticError("No snapshots found.")
 
@@ -135,11 +152,12 @@ class Rustic:
                 "--use-profile",
                 self.site_config["name"],
                 "restore",
-                f"latest:{path}",
+                f"{snapshot}:{path}",
                 path,
-            ]
+            ]  # command: rustic -P domain.com restore latest:/var/www/html /var/www/html
 
             subprocess.run(command, **self.__subprocess_args)
+            print(f"[OK] {path}")
 
     def check_config(self):
         """Check rustic configuration from sites
@@ -158,7 +176,11 @@ class Rustic:
             raise RusticConfigError("Password can't be empty")
 
     def dump_config(self) -> Path:
-        """Generate rustic config parsed from storage and site config"""
+        """Generate rustic config parsed from storage and site config
+
+        Returns:
+            Path: path to config file
+        """
 
         config = {
             "global": {

@@ -464,12 +464,6 @@ class Bqckup:
                 }
             )
 
-            if Config().read("bqckup", "config_backup"):
-                config["path"] += (
-                    STORAGE_CONFIG_PATH,
-                    os.path.join(SITE_CONFIG_PATH, config["name"]) + ".yml",
-                )
-
             rustic: Rustic = Rustic(
                 config, Yml_Parser.parse(STORAGE_CONFIG_PATH)["storages"]
             )
