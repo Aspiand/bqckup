@@ -1,7 +1,7 @@
 from os.path import join as path_join
 from pathlib import Path
 from typing import Any
-from subprocess import CompletedProcess, CalledProcessError
+from subprocess import CompletedProcess
 import json
 import toml
 import subprocess

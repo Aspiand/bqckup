@@ -1,7 +1,7 @@
 import os, time, shutil, signal, sys
 from typing import Any
 from classes.database import Database
-from classes.rustic import Rustic, RusticError
+from classes.rustic import Rustic
 from classes.storage import Storage
 from classes.tar import Tar
 from classes.file import File
