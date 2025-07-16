@@ -1,7 +1,8 @@
 import os, time, shutil, signal, sys
 from typing import Any
+from requests import RequestException
 from classes.database import Database
-from classes.rustic import Rustic
+from classes.rustic import Rustic, RusticCheckError
 from classes.storage import Storage
 from classes.tar import Tar
 from classes.file import File
@@ -40,11 +41,12 @@ signal.signal(signal.SIGINT, signal_handler)
 class Bqckup:
     def __init__(self):
         Yml_Checker.checker()
-        try:
-            s3.check_connection()
-        except Exception as e:
-            print(f"[red]{e}[/red]")
-            sys.exit()
+        # TODO: enable this
+        # try:
+        #     s3.check_connection()
+        # except Exception as e:
+        #     print(f"[red]{e}[/red]")
+        #     sys.exit()
             
     def _send_notification(self, backup_name, messages, additional_data = None, override: dict = {}):
         fields = [
@@ -421,14 +423,32 @@ class Bqckup:
 
         print(f"[green]Starting backup for {site_config['name']}[/green]\n")
 
+        bucket_name = site_config.get("options").get("storage")
+        try:
+            storage_config = Storage().get_storage_detail(bucket_name)
+            _s3 = s3(storage_name=bucket_name)
+
+        except RequestException as e: # TODO: improve error message
+            message = f"Can't fetch credential for {storage_config['bucket']} | {site_config['name']}"
+            print(message)
+            self._send_notification(
+                site_config["name"],
+                f"Error: {e}",
+                override={
+                    "title": message,
+                    "description": ("An error occurred while getting credential.\n"),
+                },
+            )
+
         # Database backup
         db_dump_path = self.backup_database(site_config)
         if include_database:
             site_config["path"].append(db_dump_path)
         else:
             print(f"Uploading {db_dump_path}...")
-            s3(storage_name=site_config.get("options").get("storage")).upload(
-                db_dump_path, Path(site_config.get("name")) / get_today() / db_dump_path.name
+            _s3.upload(
+                db_dump_path,
+                Path(site_config.get("name")) / get_today() / db_dump_path.name,
             )
 
         # Save backup in local
@@ -465,9 +485,7 @@ class Bqckup:
                 }
             )
 
-            rustic: Rustic = Rustic(
-                site_config, Yml_Parser.parse(STORAGE_CONFIG_PATH)["storages"]
-            )
+            rustic= Rustic(site_config, storage_config)
 
             result = None
             with ProgressSpinner("doing incremental backup..."):
@@ -481,6 +499,10 @@ class Bqckup:
                 description="File Backup Success",
             ).where(Log.id == logs.id).execute()
 
+            # TODO: send summary to sm
+            with ProgressSpinner():
+                ...
+
             print("=========================================")
             print("Backup complete")
             print("New Files\t:", result["new"])
@@ -491,22 +513,22 @@ class Bqckup:
             print("Time Consumed\t:", format_timespan(result["total_duration"]))
             print("=========================================")
 
-            try:
-                with ProgressSpinner("checking repository..."):
-                    rustic.check_repository()
-            except Exception as e:
-                print(f"[{site_config['name']}] Error while checking repository.")
-                self._send_notification(
-                    site_config["name"],
-                    f"Error: {e}",
-                    override={
-                        "title": f"Repository Check Failed for {site_config['name']}",
-                        "description": (
-                            "An error occurred check repository.\n"
-                            "Visit the [documentation](https://docs.bqckup.com/bqckup-documentation/troubleshoots/fixing-a-corrupted-incremental-backup) to fix it"
-                        ),
-                    },
-                )
+            with ProgressSpinner("checking repository..."):
+                rustic.check_repository()
+
+        except RusticCheckError as e:
+            print(f"[{site_config['name']}] Error while checking repository.")
+            self._send_notification(
+                site_config["name"],
+                f"Error: {e}",
+                override={
+                    "title": f"Repository Check Failed for {site_config['name']}",
+                    "description": (
+                        "An error occurred while check the repository.\n"
+                        "Visit the [documentation](https://docs.bqckup.com/bqckup-documentation/troubleshoots/fixing-a-corrupted-incremental-backup) to fix it"
+                    ),
+                },
+            )
 
         except Exception as e:
             Log.update(
@@ -527,8 +549,6 @@ class Bqckup:
                     ),
                 },
             )
-
-            return
 
     def backup_database(self, config: dict) -> Path:
         """

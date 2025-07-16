@@ -1,4 +1,3 @@
-from os.path import join as path_join
 from pathlib import Path
 from typing import Any
 from subprocess import CompletedProcess
@@ -6,14 +5,14 @@ import json
 import toml
 import subprocess
 
-from constant import RUSTIC_CONFIG_PATH, STORAGE_CONFIG_PATH, SITE_CONFIG_PATH
+from constant import RUSTIC_CONFIG_PATH, STORAGE_CONFIG_PATH
 from classes.config import Config as bqckup_config
 
 
 class RusticConfigError(Exception): ...
 
 
-class RusticIndexError(Exception): ...
+class RusticCheckError(Exception): ...
 
 
 class RusticError(Exception): ...
@@ -63,7 +62,7 @@ class Rustic:
             site_config["path"] += (STORAGE_CONFIG_PATH, site_config["config_path"])
 
         self.site_config = site_config
-        self.storage_config = storage_config[site_config["options"]["storage"]]
+        self.storage_config = storage_config
         self.__subprocess_args = {
             "capture_output": True,
             "text": True,
@@ -100,15 +99,18 @@ class Rustic:
             raise RusticError("Error while getting snapshots:", e)
 
     def check_repository(self):
-        subprocess.run(
-            [
-                "rustic",
-                "check",
-                "--use-profile",
-                self.site_config["name"],
-            ],
-            **self.__subprocess_args,
-        )
+        try:
+            subprocess.run(
+                [
+                    "rustic",
+                    "check",
+                    "--use-profile",
+                    self.site_config["name"],
+                ],
+                **self.__subprocess_args,
+            )
+        except subprocess.CalledProcessError as e:
+            raise RusticCheckError(e)
 
     def backup(self) -> dict[str, int | str]:
         """Running Backup
@@ -242,3 +244,7 @@ class Rustic:
         config_path.chmod(0o600)
 
         return config_path
+
+    # TODO: remove credential from machine
+    def clean(self):
+        ...
