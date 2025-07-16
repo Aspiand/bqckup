@@ -11,6 +11,7 @@ from classes.yml_parser import Yml_Parser
 from classes.progress import ProgressSpinner
 from classes.yml_checker import Yml_Checker
 from classes.s3 import s3
+from helpers.service_management import send_backup_summary
 from models.log import Log
 from models.notification_log import NotificationLog
 from constant import BQ_PATH, STORAGE_CONFIG_PATH, SITE_CONFIG_PATH
@@ -499,10 +500,6 @@ class Bqckup:
                 description="File Backup Success",
             ).where(Log.id == logs.id).execute()
 
-            # TODO: send summary to sm
-            with ProgressSpinner():
-                ...
-
             print("=========================================")
             print("Backup complete")
             print("New Files\t:", result["new"])
@@ -512,6 +509,8 @@ class Bqckup:
             print("Total Size\t:", format_size(result["total_size"]))
             print("Time Consumed\t:", format_timespan(result["total_duration"]))
             print("=========================================")
+
+            backup_status = "completed"
 
             with ProgressSpinner("checking repository..."):
                 rustic.check_repository()
@@ -531,6 +530,8 @@ class Bqckup:
             )
 
         except Exception as e:
+            backup_status = "failed"
+            
             Log.update(
                 status=Log.__FAILED__,
                 time_consume=time.time() - time_start,
@@ -549,6 +550,17 @@ class Bqckup:
                     ),
                 },
             )
+
+        finally:
+            # TODO: handle send error (loop?)
+            with ProgressSpinner("..."):
+                send_backup_summary(
+                    domain=site_config["name"],
+                    new_data=result["uploaded"],
+                    start_at=time_start,
+                    finish_at=time.time(),
+                    status=backup_status
+                )
 
     def backup_database(self, config: dict) -> Path:
         """
