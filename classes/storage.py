@@ -14,9 +14,6 @@ class Storage:
         try:
             storage = self.parsed_storage["storages"][name]
 
-            # TODO: test
-            #   - enable disable
-            #   - not define
             if not storage.get("remote"):
                 return storage
 
