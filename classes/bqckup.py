@@ -441,6 +441,15 @@ class Bqckup:
                 },
             )
 
+        if Config().read("bqckup", "config_backup"):
+            with ProgressSpinner("uploading config file..."):
+                _s3.upload(STORAGE_CONFIG_PATH, "storages.yml", False)
+                _s3.upload(
+                    Path(SITE_CONFIG_PATH) / site_config["file_name"],
+                    f"config/{site_config.get('name')}.yml",
+                    False,
+                )
+
         # Database backup
         db_dump_path = self.backup_database(site_config)
         if include_database:
