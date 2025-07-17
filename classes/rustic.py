@@ -206,13 +206,13 @@ class Rustic:
                 "repository": "opendal:s3",
                 "password": str(self.site_config["incremental"]["password"]),
                 "options": {
-                    "access_key_id": self.storage_config["access_key_id"] if with_credentials else None, # temporary solution
-                    "secret_access_key": self.storage_config["secret_access_key"] if with_credentials else None,
+                    "access_key_id": self.storage_config["access_key_id"],
+                    "secret_access_key": self.storage_config["secret_access_key"],
                     "region": self.storage_config["region"],
                     "bucket": self.storage_config["bucket"],
                     "endpoint": self.storage_config["endpoint"],
                     "root": f"/{self.root_folder_name}/{self.site_config['name']}/incremental",
-                },
+                } if with_credentials else None,
             },
             "backup": {
                 # "init": True,  # Create repository if not exists ### not work
