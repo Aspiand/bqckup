@@ -437,7 +437,7 @@ class Bqckup:
                 f"Error: {e}",
                 override={
                     "title": message,
-                    "description": ("An error occurred while getting credential.\n"),
+                    "description": None,
                 },
             )
 
