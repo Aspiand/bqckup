@@ -189,7 +189,7 @@ class Rustic:
         if rustic_config.get("password") is None:
             raise RusticConfigError("Password can't be empty")
 
-    def dump_config(self) -> Path:
+    def dump_config(self, with_credentials: bool = True) -> Path:
         """Generate rustic config parsed from storage and site config
 
         Returns:
@@ -206,8 +206,8 @@ class Rustic:
                 "repository": "opendal:s3",
                 "password": str(self.site_config["incremental"]["password"]),
                 "options": {
-                    "access_key_id": self.storage_config["access_key_id"],
-                    "secret_access_key": self.storage_config["secret_access_key"],
+                    "access_key_id": self.storage_config["access_key_id"] if with_credentials else None, # temporary solution
+                    "secret_access_key": self.storage_config["secret_access_key"] if with_credentials else None,
                     "region": self.storage_config["region"],
                     "bucket": self.storage_config["bucket"],
                     "endpoint": self.storage_config["endpoint"],
@@ -239,7 +239,3 @@ class Rustic:
         config_path.chmod(0o600)
 
         return config_path
-
-    # TODO: remove credential from machine
-    def clean(self):
-        ...

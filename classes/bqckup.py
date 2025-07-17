@@ -429,7 +429,7 @@ class Bqckup:
             storage_config = Storage().get_storage_detail(bucket_name)
             _s3 = s3(storage_name=bucket_name)
 
-        except RequestException as e: # TODO: improve error message
+        except RequestException as e:
             message = f"Can't fetch credential for {storage_config['bucket']} | {site_config['name']}"
             print(message)
             self._send_notification(
@@ -442,13 +442,12 @@ class Bqckup:
             )
 
         if Config().read("bqckup", "config_backup"):
-            with ProgressSpinner("uploading config file..."):
-                _s3.upload(STORAGE_CONFIG_PATH, "storages.yml", False)
-                _s3.upload(
-                    Path(SITE_CONFIG_PATH) / site_config["file_name"],
-                    f"config/{site_config.get('name')}.yml",
-                    False,
-                )
+            _s3.upload(STORAGE_CONFIG_PATH, "storages.yml", False)
+            _s3.upload(
+                Path(SITE_CONFIG_PATH) / site_config["file_name"],
+                f"config/{site_config.get('name')}.yml",
+                False,
+            )
 
         # Database backup
         db_dump_path = self.backup_database(site_config)
@@ -495,7 +494,7 @@ class Bqckup:
                 }
             )
 
-            rustic= Rustic(site_config, storage_config)
+            rustic = Rustic(site_config, storage_config)
 
             result = None
             with ProgressSpinner("doing incremental backup..."):
@@ -561,6 +560,7 @@ class Bqckup:
             )
 
         finally:
+            rustic.dump_config(with_credentials=False)
             try:
                 with ProgressSpinner("sending data..."):
                     send_backup_summary(
