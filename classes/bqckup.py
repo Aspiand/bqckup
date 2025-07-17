@@ -531,7 +531,7 @@ class Bqckup:
 
         except Exception as e:
             backup_status = "failed"
-            
+
             Log.update(
                 status=Log.__FAILED__,
                 time_consume=time.time() - time_start,
@@ -552,15 +552,17 @@ class Bqckup:
             )
 
         finally:
-            # TODO: handle send error (loop?)
-            with ProgressSpinner("..."):
-                send_backup_summary(
-                    domain=site_config["name"],
-                    new_data=result["uploaded"],
-                    start_at=time_start,
-                    finish_at=time.time(),
-                    status=backup_status
-                )
+            try:
+                with ProgressSpinner("sending data..."):
+                    send_backup_summary(
+                        domain=site_config["name"],
+                        new_data=result["uploaded"],
+                        start_at=int(time_start),
+                        finish_at=int(time.time()),
+                        status=backup_status,
+                    )
+            except Exception as e:
+                print(f"Error: {e}")
 
     def backup_database(self, config: dict) -> Path:
         """
