@@ -219,10 +219,6 @@ class Bqckup:
             print(f"[red]Backup for {backup_name} is not enabled[/red]")
             return True
 
-        if Log().select().where((Log.name == backup_name) & (Log.status == Log.__ON_PROGRESS__)).exists():
-            print(f"Backup for {backup_name} is already running...")
-            return True
-
         last_log = self.get_last_log(backup_name)
         if last_log:
             interval = backup['options']['interval']
@@ -260,6 +256,15 @@ class Bqckup:
                 print("=========================================\n")
                 print("Visit: https://bqckup.com\n")
                 return True
+
+        if (
+            Log().select().where(
+                (Log.name == backup_name) &
+                (Log.status == Log.__ON_PROGRESS__)
+            ).exists()
+        ):
+            print(f"Backup for {backup_name} is already running...")
+            return True
 
         return False
 
@@ -763,7 +768,6 @@ class Bqckup:
                     should_save_locally=should_save_locally,
                     save_locally_path=save_locally_path,
                 )
-
             else:
                 log_update_data["status"] = Log.__FAILED__
                 self._send_notification(
