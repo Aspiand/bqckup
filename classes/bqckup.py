@@ -318,7 +318,7 @@ class Bqckup:
                 })
 
                 max_retries = backup.get("options", {}).get("retries", 3)
-                backoff = backup.get("options", {}).get("backoff", 10) # in seconds
+                backoff = backup.get("options", {}).get("backoff", 30) # in seconds
                 backup_result = None
 
                 for attempt in range(max_retries):
@@ -722,7 +722,7 @@ class Bqckup:
             )
 
             max_retries = site_config.get("options", {}).get("retries", 3)
-            backoff = site_config.get("options", {}).get("backoff", 10)  # in seconds
+            backoff = site_config.get("options", {}).get("backoff", 30)  # in seconds
             result = {}
 
             for attempt in range(max_retries):
