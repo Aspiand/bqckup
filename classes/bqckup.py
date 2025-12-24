@@ -16,7 +16,7 @@ from helpers.hook import send_backup_summary
 from helpers.utility import is_debug
 from models.log import Log
 from models.notification_log import NotificationLog
-from constant import BQ_PATH, STORAGE_CONFIG_PATH, SITE_CONFIG_PATH
+from constant import BQ_PATH, STORAGE_CONFIG_PATH, SITE_CONFIG_PATH, MAX_RETRIES, BACKOFF
 from datetime import datetime
 from helpers.file import remove_folder
 from hashlib import sha256
@@ -317,12 +317,10 @@ class Bqckup:
                     "file_path": "/dev/null"
                 })
 
-                max_retries = backup.get("options", {}).get("retries", 3)
-                backoff = backup.get("options", {}).get("backoff", 30) # in seconds
                 backup_result = None
 
-                for attempt in range(max_retries):
-                    attempt_info = f"(Attempt {attempt + 1}/{max_retries})" if attempt > 0 else ""
+                for attempt in range(MAX_RETRIES):
+                    attempt_info = f"(Attempt {attempt + 1}/{MAX_RETRIES})" if attempt > 0 else ""
                     print(f"[green]Starting file backup for {backup['name']}[/green] {attempt_info}...")
 
                     backup_result = backup_method(backup)
@@ -334,11 +332,11 @@ class Bqckup:
                     error_message = backup_result.get("message", "Unknown error")
                     print(f"[yellow]File backup for {backup['name']} failed: {error_message}[/yellow]")
 
-                    if attempt < max_retries - 1:
-                        print(f"[yellow]Retrying in {backoff} seconds...[/yellow]")
-                        time.sleep(backoff)
+                    if attempt < MAX_RETRIES - 1:
+                        print(f"[yellow]Retrying in {BACKOFF} seconds...[/yellow]")
+                        time.sleep(BACKOFF)
                 else:
-                    print(f"[red]File backup for {backup['name']} failed after {max_retries} attempts.[/red]")
+                    print(f"[red]File backup for {backup['name']} failed after {MAX_RETRIES} attempts.[/red]")
 
                 if backup_result:
                     log_update_data = {
@@ -721,12 +719,10 @@ class Bqckup:
                 }
             )
 
-            max_retries = site_config.get("options", {}).get("retries", 3)
-            backoff = site_config.get("options", {}).get("backoff", 30)  # in seconds
             result = {}
 
-            for attempt in range(max_retries):
-                attempt_info = f" (Attempt {attempt + 1}/{max_retries})" if attempt > 0 else ""
+            for attempt in range(MAX_RETRIES):
+                attempt_info = f" (Attempt {attempt + 1}/{MAX_RETRIES})" if attempt > 0 else ""
                 print(f"Starting database backup for {site_config['name']} {db_label}{attempt_info}")
 
                 result = self.backup_database(
@@ -744,11 +740,11 @@ class Bqckup:
                 error_message = result.get("error", "Unknown error")
                 print(f"[yellow]Database backup for {db_label} failed: {error_message}[/yellow]")
 
-                if attempt < max_retries - 1:
-                    print(f"[yellow]Retrying in {backoff} seconds...[/yellow]")
-                    time.sleep(backoff)
+                if attempt < MAX_RETRIES - 1:
+                    print(f"[yellow]Retrying in {BACKOFF} seconds...[/yellow]")
+                    time.sleep(BACKOFF)
             else:
-                print(f"[red]Database backup for {db_label} failed after {max_retries} attempts.[/red]")
+                print(f"[red]Database backup for {db_label} failed after {MAX_RETRIES} attempts.[/red]")
 
             log_update_data = {
                 "time_consume": result.get("time_consumed", 0),
