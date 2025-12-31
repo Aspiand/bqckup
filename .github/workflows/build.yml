@@ -53,14 +53,36 @@ jobs:
           cd ./dist
           tar -czf ../bqckup-${{ env.VERSION }}-${{ matrix.distro }}.tar.gz bqckup
 
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bqckup-${{ matrix.distro }}
+          path: ./bqckup-${{ env.VERSION }}-${{ matrix.distro }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get bqckup version
+        run: |
+          version=$(python3 -c "exec(open('constant/__init__.py').read()); print(f'v{VERSION}')")
+          echo "VERSION=$version" >> $GITHUB_ENV
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
       - name: Create GitHub Release
-        id: create_release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.VERSION }}
           name: ${{ env.VERSION }}
           generate_release_notes: true
-          files: |
-            ./bqckup-${{ env.VERSION }}-${{ matrix.distro }}.tar.gz
+          files: artifacts/**/*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
