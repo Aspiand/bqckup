@@ -4,45 +4,46 @@ on:
   push: 
     branches:
       - 1x*
+
 jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-20.04, ubuntu-22.04]
+        include:
+          - os: ubuntu-latest
+            container: ubuntu:20.04
+            ubuntu_version: "20.04"
+          
+          - os: ubuntu-22.04
+            container: null
+            ubuntu_version: "22.04"
+    
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    
     steps:
+      - name: Install Git (untuk container)
+        if: matrix.container != null
+        run: |
+          apt-get update
+          apt-get install -y git
+      
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
+      
+      - name: Setup Python (container)
+        if: matrix.container != null
+        run: |
+          apt-get update
+          apt-get install -y python3 python3-pip
+      
+      - name: Setup Python (native runner)
+        if: matrix.container == null
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
-      - name: Build & Install
+      
+      - name: Verify Installation
         run: |
-          make && make install
-        
-      - name: get bqckup version
-        run: |
-          version=$(python -c "exec(open('constant/__init__.py').read()); print(f'v{VERSION}')")
-          echo "VERSION=$version" >> $GITHUB_ENV
-
-      - uses: a7ul/tar-action@v1.2.0
-        id: compress
-        with:
-          command: c
-          cwd: ./dist
-          files: |
-            bqckup
-          outPath: ./bqckup-${{ env.VERSION }}-${{ matrix.os }}.tar.gz
-
-      - name: Create GitHub Release
-        id: create_release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.VERSION }}
-          name: ${{ env.VERSION }}
-          generate_release_notes: true
-          files: |
-            ./bqckup-${{ env.VERSION }}-${{ matrix.os }}.tar.gz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          python3 --version
+          cat /etc/os-release
+          echo "Testing on Ubuntu ${{ matrix.ubuntu_version }}"
