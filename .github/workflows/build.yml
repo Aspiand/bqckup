@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ${{ matrix.container }}
+      options: --entrypoint /bin/bash
 
     steps:
       - name: Install dependencies
