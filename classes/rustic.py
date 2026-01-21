@@ -8,6 +8,7 @@ import toml
 import traceback
 import subprocess
 import re
+import os
 
 from constant import LOG_DIR, RUSTIC_CONFIG_PATH
 from classes.config import Config as bqckup_config
@@ -320,7 +321,13 @@ class Rustic:
                     "--use-profile",
                     self.site_config["name"],
                 ],
-                **self.__subprocess_args,  # type: ignore
+                text=True,
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                env=os.environ.copy().update({
+                    "HOME": "/root",
+                }),
             )
             self._write_stderr_to_log(output.stderr)
         except subprocess.CalledProcessError as e:
