@@ -1,4 +1,6 @@
-import os, time, shutil, signal, sys
+from helpers.utility import now
+from typing import List
+import os, time, shutil, signal, sys, socket
 import traceback
 from subprocess import CalledProcessError
 from typing import Any, Dict, Optional
@@ -16,7 +18,8 @@ from helpers.hook import send_backup_summary
 from helpers.utility import is_debug
 from models.log import Log
 from models.notification_log import NotificationLog
-from constant import BQ_PATH, STORAGE_CONFIG_PATH, SITE_CONFIG_PATH, MAX_RETRIES, BACKOFF
+from classes.master import Master
+from constant import BQ_PATH, STORAGE_CONFIG_PATH, SITE_CONFIG_PATH, MAX_RETRIES, BACKOFF, VERSION
 from datetime import datetime
 from helpers.file import remove_folder
 from hashlib import sha256
@@ -215,6 +218,12 @@ class Bqckup:
         Returns:
             True if the backup should be skipped, False otherwise.
         """
+
+        # TODO: improve this
+        # - ambil semua log terakhir berdasarkan nama dan interval
+        # - jika ada log yang statusnya adalah success dan belum melebihi interval, maka skip
+        # - jika log belum interval tetapi ada error, maka akan dijalankan ulang
+
         backup_name: str = backup["name"]
         if not (backup.get("enabled") or backup.get("enable")):
             print(f"[red]Backup for {backup_name} is not enabled[/red]")
@@ -296,6 +305,11 @@ class Bqckup:
 
         for backup in valid_backups.values():
             log = None
+            skipped = False
+            database_results = []
+            backup_result = None
+            site_started_at = int(time.time())
+
             try:
                 if self._should_skip_backup(backup, force):
                     continue
@@ -305,10 +319,11 @@ class Bqckup:
                 _s3 = s3(storage_name=storage_name) if is_s3 and storage_name else None
 
                 self.backup_config(backup, _s3)
-                self.backup_databases(backup, _s3)
+                database_results = self.backup_databases(backup, _s3)
 
                 # if no option passed, use config instead
                 is_incremental = Rustic.is_enabled(backup) if incremental is None else incremental
+                backup_mode = "incremental" if is_incremental else "archive"
                 backup_method = self.incremental_backup if is_incremental else self.full_backup
                 log = Log().write({
                     "name": backup['name'],
@@ -384,6 +399,43 @@ class Bqckup:
                 )
 
                 continue
+            finally:
+                if not skipped:
+                    try:                        
+                        file_backup_data = None
+                        if backup_result:                                
+                            summary = backup_result.get("summary_payload", {})
+                            file_backup_data = {
+                                "status": "completed" if backup_result.get("status") == "success" else "failed",
+                                "size": backup_result.get("file_size", summary.get("total_size", 0)),
+                                "errors": backup_result.get("message") if backup_result.get("status") != "success" else None,
+                                "started_at": summary.get("start_at"),
+                                "ended_at": summary.get("finish_at")
+                            }
+                        payload = {
+                            "hostname": socket.gethostname(),
+                            "bqckup_version": VERSION,
+                            "rustic_version": Rustic.version(),
+                            "sites": [
+                                {
+                                    "name": backup['name'],
+                                    "config": backup,
+                                    "mode": backup_mode,
+                                    "started_at": site_started_at,
+                                    "ended_at": now(),
+                                    "backups": {
+                                        "file": file_backup_data,
+                                        "databases": database_results
+                                    }
+                                }
+                            ]
+                        }
+
+                        Master.get().send(payload)
+                    except Exception as e:
+                        print(f"[red]Failed to send backup report for {backup['name']}: {e}[/red]")
+                        if is_debug():
+                            traceback.print_exc()
 
     def backup_config(self, site_config: Dict[str, Any], _s3: Optional[s3]) -> None:
         """Backs up configuration files."""
@@ -691,11 +743,14 @@ class Bqckup:
 
         return result
 
-    def backup_databases(self, site_config: Dict[str, Any], s3: Optional[s3]):
+    def backup_databases(self, site_config: Dict[str, Any], s3: Optional[s3]) -> List[Dict[str, Any]]:
         databases = Database.get_all(site_config)
+        results = []
 
         if not databases:
-            return
+            return results
+
+        print(f"Backing up {len(databases)} databases...")
 
         should_save_locally: bool = site_config.get("options", {}).get("save_locally", False)
         save_locally_path_str = site_config.get("options", {}).get("save_locally_path", "/etc/bqckup/tmp")
@@ -709,6 +764,21 @@ class Bqckup:
             db_label = f"{database['user']}@{database['host']}:{database['port']}/{database['name']}"
             tmp_path: Path = Path(BQ_PATH) / "tmp" / site_config["name"]
             backup_path = tmp_path / f"{int(time.time())}-{database['name']}.sql.gz"
+
+            db_job_result = {
+                "database": {
+                    "name": database["name"],
+                    "host": database["host"],
+                    "port": database["port"],
+                    "user": database["user"],
+                    "type": database["type"],
+                },
+                "status": "failed",
+                "size": 0,
+                "started_at": now(),
+                "ended_at": None,
+                "errors": None,
+            }
 
             current_log = Log().write(
                 {
@@ -774,6 +844,17 @@ class Bqckup:
                 )
 
             Log.update(log_update_data).where(Log.id == current_log.id).execute()
+
+            db_job_result.update({
+                "ended_at": now(),
+                "status": "completed" if result.get("status") == "success" else "failed",
+                "size": result.get("file_size", 0),
+                "errors": result.get("error") or result.get("message"),
+            })
+
+            results.append(db_job_result)
+
+        return results
 
     def backup_database(
         self,

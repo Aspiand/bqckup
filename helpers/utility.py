@@ -134,3 +134,7 @@ def is_debug():
 
 def is_verbose():
     return os.environ.get('BQCKUP_VERBOSE', "0") == "1"
+
+def now() -> int:
+    """Returns the current time in seconds since the epoch."""
+    return int(time.time())

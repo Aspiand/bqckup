@@ -82,20 +82,17 @@ class Rustic:
             "check": True,
         }
 
-    @cached_property
-    def version(self) -> str:
+    @staticmethod
+    def version() -> Optional[str]:
+        # TODO: handle get-list or other command ayang bergantung ke method ini
         """Get rustic version"""
         try:
             output: CompletedProcess = subprocess.run(
                 ["rustic", "--version"],
-                **self.__subprocess_args,  # type: ignore
+                capture_output=True,
+                text=True,
+                check=True,
             )
-
-            self._write_stderr_to_log(output.stderr)
-
-            # Example outputs:
-            # NixOS package: `rustic 0.10.2`
-            # Manual install (release/build): `rustic v0.10.2-1-g189b17c`
 
             full_version_string = output.stdout.strip().split(" ")[1]
             match = re.search(r'v?(\d+\.\d+\.\d+)', full_version_string)
@@ -105,10 +102,7 @@ class Rustic:
             return match.group(1)
 
         except (CalledProcessError, FileNotFoundError, IndexError) as e:
-            if isinstance(e, CalledProcessError):
-                self._write_stderr_to_log(e.stderr)
-
-            if is_debug:
+            if is_debug():
                 traceback.print_exc()
             raise RusticError(f"Could not determine rustic version. Error: {e}") from e
 
