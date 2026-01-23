@@ -4,6 +4,7 @@ from rich.console import Console
 from humanfriendly import format_size
 from rich.table import Table
 from rich import print
+import time
 
 def get_os_version():
     # get ubuntu version

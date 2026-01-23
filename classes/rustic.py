@@ -83,8 +83,7 @@ class Rustic:
         }
 
     @staticmethod
-    def version() -> Optional[str]:
-        # TODO: handle get-list or other command ayang bergantung ke method ini
+    def version() -> str:
         """Get rustic version"""
         try:
             output: CompletedProcess = subprocess.run(
@@ -109,7 +108,7 @@ class Rustic:
     @cached_property
     def version_tuple(self) -> Tuple[int, ...]:
         """Get rustic version as a tuple of ints"""
-        return tuple(map(int, self.version.split(".")))
+        return tuple(map(int, self.version().split(".")))
 
     @property
     def root_folder_name(self) -> str:

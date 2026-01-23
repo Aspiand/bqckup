@@ -40,11 +40,6 @@ class Master:
             }
         )
 
-        # Retry strategy with Exponential Backoff and Jitter
-        # - total: total number of retries
-        # - backoff_factor: sleep factor (sleep_seconds = backoff_factor * (2 ** (retry_count - 1)))
-        # - status_forcelist: HTTP status codes to retry on (5xx errors)
-        # - method_whitelist: HTTP methods to retry (POST is generally not idempotent, but here we assume safe)
         retry_strategy = Retry(
             total=MAX_RETRIES,
             backoff_factor=1,  # Start with 1s, then 2s, 4s, etc.
@@ -73,7 +68,7 @@ class Master:
 
             if response.status_code == 201 or response.status_code == 204:
                 if is_debug():
-                    print(f"[green]Successfully sent report to master: {response.status_code}[/green]")
+                    print(f"[green]Successfully sent report to master[/green]")
             else:
                 print(f"[red]Failed to send report to master. Status: {response.status_code}. Response: {response.text}[/red]")
 
