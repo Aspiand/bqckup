@@ -544,10 +544,6 @@ def get_list(
 
     show_snapshots = show_snapshots and Rustic.is_enabled(node)
 
-    if not node:
-        print(f"[red] Backup for {name} not found [/red]")
-        return None
-
     _s3 = s3(node["options"]["storage"])
 
     backup_dates = _s3.get_backup_dates(site_name=name, sort_by_date=True)

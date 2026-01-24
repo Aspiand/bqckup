@@ -7,8 +7,7 @@ from typing import Dict, Any
 from rich import print
 
 from classes.config import Config
-from constant import MAX_RETRIES
-from constant import VERSION
+from constant import MAX_RETRIES, DEFAULT_HEADER
 from helpers.utility import is_debug
 
 
@@ -31,14 +30,9 @@ class Master:
         self.enabled = bool(self.url and self.api_key)
 
         self.session = requests.Session()
-        self.session.headers.update(
-            {
-                "Authorization": f"Bearer {self.api_key}",
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-                "User-Agent": f"bqckup/{VERSION}",
-            }
-        )
+
+        self.session.headers.update(DEFAULT_HEADER)
+        self.session.headers.update({"Authorization": f"Bearer {self.api_key}"})
 
         retry_strategy = Retry(
             total=MAX_RETRIES,
@@ -59,16 +53,11 @@ class Master:
         endpoint = f"{self.url.rstrip('/')}/api/v1/backup/new"
 
         try:
-            # We use a custom backoff loop for more control (like Jitter) if needed,
-            # but requests.adapters.Retry is cleaner for standard cases.
-            # To add Jitter manually we would wrap this in a loop, but for now
-            # standard exponential backoff provided by urllib3 is a good minimal start.
-
             response = self.session.post(endpoint, json=payload, timeout=30)
 
             if response.status_code == 201 or response.status_code == 204:
                 if is_debug():
-                    print(f"[green]Successfully sent report to master[/green]")
+                    print("[green]Successfully sent report to master[/green]")
             else:
                 print(f"[red]Failed to send report to master. Status: {response.status_code}. Response: {response.text}[/red]")
 
