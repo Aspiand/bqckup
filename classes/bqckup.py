@@ -219,11 +219,6 @@ class Bqckup:
             True if the backup should be skipped, False otherwise.
         """
 
-        # TODO: improve this
-        # - ambil semua log terakhir berdasarkan nama dan interval
-        # - jika ada log yang statusnya adalah success dan belum melebihi interval, maka skip
-        # - jika log belum interval tetapi ada error, maka akan dijalankan ulang
-
         backup_name: str = backup["name"]
         if not (backup.get("enabled") or backup.get("enable")):
             print(f"[red]Backup for {backup_name} is not enabled[/red]")
@@ -309,7 +304,7 @@ class Bqckup:
             database_results = []
             backup_result = None
             backup_errors = []
-            site_started_at = int(time.time())
+            site_started_at = now()
 
             is_incremental = Rustic.is_enabled(backup) if incremental is None else incremental
             backup_mode = "incremental" if is_incremental else "archive"
@@ -422,21 +417,17 @@ class Bqckup:
                         for i in removed_keys:
                             config.pop(i)
 
-                        file_backup_data = None
+                        file_backup = None
                         if backup_result:
                             summary = backup_result.get("summary_payload", {})
-
-                            errors = []
-                            if "traceback" in backup_result:
-                                errors.append(backup_result["traceback"])
-
-                            file_backup_data = {
+                            file_backup = {
                                 "status": "completed" if backup_result.get("status") == "success" else "failed",
                                 "size": backup_result.get("file_size", summary.get("total_size", 0)),
-                                "errors": errors,
+                                "errors": backup_result.get("traceback"),
                                 "started_at": summary.get("start_at"),
                                 "ended_at": summary.get("finish_at"),
                             }
+
                         payload = {
                             "hostname": socket.gethostname(),
                             "bqckup_version": VERSION,
@@ -449,7 +440,7 @@ class Bqckup:
                                     "config": config,
                                     "mode": backup_mode,
                                     "backups": {
-                                        "file": file_backup_data,
+                                        "file": file_backup,
                                         "databases": database_results,
                                     },
                                 }
@@ -692,6 +683,7 @@ class Bqckup:
             rustic.clean()
 
         except RusticCleanError as e:
+            result["traceback"] = traceback.format_exc()
             result["status"] = "success"
             result["message"] = "File Backup Success, but repository cleanup failed."
 
@@ -713,6 +705,7 @@ class Bqckup:
 
 
         except RusticCheckError as e:
+            result["traceback"] = traceback.format_exc()
             result["status"] = "success"
             result["message"] = "File Backup Success, but repository check failed."
             result["notification"] = {
