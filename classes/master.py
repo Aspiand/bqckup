@@ -7,7 +7,7 @@ from typing import Dict, Any
 from rich import print
 
 from classes.config import Config
-from constant import MAX_RETRIES, DEFAULT_HEADER
+from constant import DEFAULT_HEADER
 from helpers.utility import is_debug
 
 
@@ -21,21 +21,13 @@ class Master:
         return Master.__instance
 
     def __init__(self):
-        if Master.__instance is not None:  # return instance?
-            raise Exception("This class is a singleton!")
-
-        self.config = Config()
-        self.url = self.config.read("master", "url", print_error=False)
-        self.api_key = self.config.read("master", "api_key", print_error=False)
-        self.enabled = bool(self.url and self.api_key)
+        self.url = Config().read("master", "url", print_error=False)
 
         self.session = requests.Session()
-
         self.session.headers.update(DEFAULT_HEADER)
-        self.session.headers.update({"Authorization": f"Bearer {self.api_key}"})
 
         retry_strategy = Retry(
-            total=MAX_RETRIES,
+            total=5,
             backoff_factor=1,  # Start with 1s, then 2s, 4s, etc.
             status_forcelist=[429, 500, 502, 503, 504],
             allowed_methods=["POST"],
@@ -47,7 +39,7 @@ class Master:
         self.session.mount("http://", adapter)
 
     def send(self, payload: Dict[str, Any]) -> None:
-        if not self.enabled:
+        if not self.url:
             return
 
         endpoint = f"{self.url.rstrip('/')}/api/v1/backup/new"
@@ -56,8 +48,7 @@ class Master:
             response = self.session.post(endpoint, json=payload, timeout=30)
 
             if response.status_code == 201 or response.status_code == 204:
-                if is_debug():
-                    print("[green]Successfully sent report to master[/green]")
+                print("[green]Successfully sent report to master[/green]")
             else:
                 print(f"[red]Failed to send report to master. Status: {response.status_code}. Response: {response.text}[/red]")
 

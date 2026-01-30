@@ -279,10 +279,7 @@ class Bqckup:
         site: Optional[str] = None,
         incremental: Optional[bool] = None,
     ):
-        if site:
-            backups = {0: self.detail(site)}
-        else:
-            backups = self.list()
+        backups = {0: self.detail(site)} if site else self.list()
 
         if not backups:
             print("No backups found")
@@ -304,7 +301,7 @@ class Bqckup:
             database_results = []
             backup_result = None
             backup_errors = []
-            site_started_at = now()
+            backup_started_at = now()
 
             is_incremental = Rustic.is_enabled(backup) if incremental is None else incremental
             backup_mode = "incremental" if is_incremental else "archive"
@@ -432,7 +429,7 @@ class Bqckup:
                             "hostname": socket.gethostname(),
                             "bqckup_version": VERSION,
                             "rustic_version": rustic_version,
-                            "started_at": site_started_at,
+                            "started_at": backup_started_at,
                             "ended_at": now(),
                             "sites": [
                                 {
