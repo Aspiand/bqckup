@@ -130,11 +130,14 @@ def isset(key, array = None):
     else:
         return key in globals()
 
-def is_debug():
+def is_debug() -> bool:
     return os.environ.get('BQCKUP_DEBUG', "0") == "1"
 
-def is_verbose():
+def is_verbose() -> bool:
     return os.environ.get('BQCKUP_VERBOSE', "0") == "1"
+
+def should_keep_rustic_secrets() -> bool:
+    return os.environ.get('BQCKUP_KEEP_RUSTIC_SECRETS', "0") == "1"
 
 def now() -> int:
     """Returns the current time in seconds since the epoch."""

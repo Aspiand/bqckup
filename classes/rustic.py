@@ -11,7 +11,7 @@ import re
 
 from constant import LOG_DIR, RUSTIC_CONFIG_PATH
 from classes.config import Config as bqckup_config
-from helpers.utility import is_debug
+from helpers.utility import should_keep_rustic_secrets
 
 from rich import print  # pyright: ignore[reportMissingImports]
 
@@ -432,7 +432,7 @@ class Rustic:
                     "bucket": self.storage_config["bucket"],
                     "endpoint": self.storage_config["endpoint"],
                     "root": f"/{self.root_folder_name}/{self.site_config['name']}/incremental",
-                } if with_credentials or is_debug() else None,
+                } if with_credentials or should_keep_rustic_secrets() else None,
             },
             "backup": {
                 # "init": True,  # Create repository if not exists ### not work

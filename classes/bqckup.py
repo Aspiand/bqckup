@@ -754,6 +754,9 @@ class Bqckup:
                 ),
             }
 
+        finally:
+            rustic.dump_config(with_credentials=False)
+
         time_consumed = time.time() - time_start
         result["time_consumed"] = time_consumed
         result["summary_payload"]["finish_at"] = int(time.time())
