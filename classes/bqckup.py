@@ -345,8 +345,9 @@ class Bqckup:
                         print(f"[green]File backup for {backup['name']} successful.[/green]")
                         break
 
-                    if (error := backup_result.get("error")) and isinstance(error, Exception):
-                        backup_errors.append(error)
+                    error = backup_result.get("traceback") or backup_result.get("error")
+                    if error:
+                        backup_errors.append(str(error))
 
                     error_message = backup_result.get("message", "Unknown error")
                     print(f"[yellow]File backup for {backup['name']} failed: {error_message}[/yellow]")
@@ -420,7 +421,7 @@ class Bqckup:
                             file_backup = {
                                 "status": "completed" if backup_result.get("status") == "success" else "failed",
                                 "size": backup_result.get("file_size", summary.get("total_size", 0)),
-                                "errors": backup_result.get("traceback"),
+                                "errors": backup_errors,
                                 "started_at": summary.get("start_at"),
                                 "ended_at": summary.get("finish_at"),
                             }
@@ -480,6 +481,7 @@ class Bqckup:
             "status": "failed",
             "message": "",
             "error": None,
+            "traceback": None,
             "time_consumed": 0,
             "summary_payload": summary_payload,
         }
@@ -634,6 +636,7 @@ class Bqckup:
             "status": "failed",
             "message": "",
             "error": None,
+            "traceback": None,
             "time_consumed": 0,
             "summary_payload": summary_payload,
             "notification": {}
@@ -789,7 +792,7 @@ class Bqckup:
                 "database": {
                     "name": database["name"],
                     "host": database["host"],
-                    "port": database["port"],
+                    "port": int(database["port"]),
                     "user": database["user"],
                     "type": database["type"],
                 },
@@ -828,8 +831,9 @@ class Bqckup:
                     print(f"[green]Database backup for {db_label} successful.[/green]")
                     break
 
-                if (error := result.get("error")) and isinstance(error, Exception):
-                    db_job_result["errors"].append(error)
+                error = result.get("traceback") or result.get("error")
+                if error:
+                    db_job_result["errors"].append(str(error))
 
                 error_message = result.get("error", "Unknown error")
                 print(f"[yellow]Database backup for {db_label} failed: {error_message}[/yellow]")
@@ -868,15 +872,10 @@ class Bqckup:
 
             Log.update(log_update_data).where(Log.id == current_log.id).execute()
 
-            errors = []
-            if "traceback" in result:
-                errors.append(result["traceback"])
-
             db_job_result.update({
                 "ended_at": now(),
                 "status": "completed" if result.get("status") == "success" else "failed",
                 "size": result.get("file_size", 0),
-                "errors": errors,
             })
 
             results.append(db_job_result)
