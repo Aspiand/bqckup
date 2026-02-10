@@ -7,6 +7,7 @@ import json
 import toml
 import traceback
 import subprocess
+import shutil
 import re
 
 from constant import LOG_DIR, RUSTIC_CONFIG_PATH
@@ -121,6 +122,10 @@ class Rustic:
     def is_enabled(config: dict) -> bool:
         incremental = config.get("incremental", {})
         return incremental and (incremental.get("enabled") or incremental.get("enable"))
+
+    @staticmethod
+    def is_installed() -> bool:
+        return shutil.which('rustic') is not None
 
     def _write_stderr_to_log(self, stderr: Optional[str]):
         if stderr and stderr.strip():
