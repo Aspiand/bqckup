@@ -300,18 +300,27 @@ class Bqckup:
             skipped = False
             database_results = []
             backup_result = None
-            backup_errors = []
-            backup_started_at = now()
+            backup_errors = []            
+
+            master_payload = {
+                "hostname": socket.gethostname(),
+                "bqckup_version": VERSION,
+                "rustic_version": rustic_version,
+                "started_at": now(),
+            }
 
             is_incremental = Rustic.is_enabled(backup) if incremental is None else incremental
             backup_mode = "incremental" if is_incremental else "archive"
-            rustic_version = None
 
-            try:
-                rustic_version = Rustic.version()
-            except Exception as e:
-                if is_incremental:
-                    raise Exception(f"failed to get rustic version: {e}") from e
+            rustic_version = Rustic.version()
+            if not rustic_version:
+                ...
+
+            # try:
+            #     rustic_version = 
+            # except Exception as e:
+            #     if is_incremental:
+            #         raise Exception(f"failed to get rustic version: {e}") from e
 
             try:
                 if self._should_skip_backup(backup, force):
@@ -423,7 +432,7 @@ class Bqckup:
                                 "size": backup_result.get("file_size", summary.get("total_size", 0)),
                                 "errors": backup_errors,
                                 "started_at": summary.get("start_at"),
-                                "ended_at": summary.get("finish_at"),
+                                "ended_at": summary.get("finish_at", now()),
                             }
 
                         payload = {
@@ -432,17 +441,15 @@ class Bqckup:
                             "rustic_version": rustic_version,
                             "started_at": backup_started_at,
                             "ended_at": now(),
-                            "sites": [
-                                {
-                                    "name": backup["name"],
-                                    "config": config,
-                                    "mode": backup_mode,
-                                    "backups": {
-                                        "file": file_backup,
-                                        "databases": database_results,
-                                    },
-                                }
-                            ],
+                            "site": {
+                                "name": backup["name"],
+                                "config": config,
+                                "mode": backup_mode,
+                                "backups": {
+                                    "file": file_backup,
+                                    "databases": database_results,
+                                },
+                            },
                         }
 
                         Master.get().send(payload)
@@ -920,12 +927,13 @@ class Bqckup:
             result["file_size"] = backup_path.stat().st_size
 
         except Exception as e:
-            result["status"] = "failed"
+            result["status"] = "canceled" if isinstance(e, KeyboardInterrupt) else "failed"
             result["message"] = f"Database Backup Failed for '{db_label}': {e}"
             result["error"] = e
             result["traceback"] = traceback.format_exc()
 
         result["time_consumed"] = time.time() - time_start
+        result["ended_at"] = now()
         return result
 
     def _post_database_backup(
