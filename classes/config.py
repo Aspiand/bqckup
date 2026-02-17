@@ -10,6 +10,8 @@ class Config:
         try:
             return self.config_parser[section][key]
         except Exception as e:
+            import traceback
+            traceback.print_exec()
             if print_error:
                 print(f"Failed to read config, {str(e)}")
                 print(f"Check if {CONFIG_PATH} exists and has the correct format")
